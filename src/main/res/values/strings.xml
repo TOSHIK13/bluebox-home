@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Blue Box Home</string>
+    <string name="continue_watching">Продолжить просмотр</string>
+    <string name="resume">Продолжить</string>
+    <string name="empty_title">Здесь появится то, что вы смотрите</string>
+    <string name="empty_hint">Откройте Blue Box или другое приложение — начатые фильмы и серии покажутся на этом экране</string>
+    <string name="open_bluebox">Открыть Blue Box</string>
+    <string name="settings">Настройки</string>
+    <string name="search">Поиск</string>
+    <string name="all_apps">Все приложения</string>
+    <string name="vpn">VPN</string>
+    <string name="vpn_on">VPN включён</string>
+    <string name="vpn_off">VPN выключен</string>
+    <string name="vpn_connecting">VPN подключается…</string>
+    <string name="vpn_error">VPN: нет связи</string>
+    <string name="minutes_left">Осталось %1$d мин</string>
+    <string name="system">Система</string>
+    <string name="wifi">Wi-Fi</string>
+    <string name="bluetooth">Bluetooth</string>
+    <string name="back">Назад</string>
+    <string name="no_app">Не удалось открыть: %1$s</string>
+</resources>
