@@ -906,7 +906,7 @@ function Invoke-OneCore([string]$cmd, [string[]]$t) {
         # signed release of Home (applicationId app.bluebox.home) for the real TV (owner: «Да, ставь на ТВ», 2026-11-08): `install -r` only,
         # never a downgrade; the launcher is started explicitly and does not become the default Home by itself.
         'install-release' {
-            $relApk = Join-Path $repo 'appuild\outputspkeleasepp-release.apk'
+            $relApk = Join-Path $repo 'app' | Join-Path -ChildPath 'build/outputs/apk/release/app-release.apk'
             if (-not (Test-Path $relApk)) { throw "no APK: build it first (gradlew :app:assembleRelease): $relApk" }
             AdbQuiet install -r $relApk; "installed: $relApk -> $serial"
         }
