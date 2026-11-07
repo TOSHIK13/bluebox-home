@@ -1,7 +1,7 @@
-# M6-H2: Blue Box Home (:app-home) - смоук главного экрана на эмуляторе.
-# Предусловие: debug-APK поставлен вручную (`gradlew :app-home:assembleDebug`, затем adb -s emulator-NNNN install -r app-home/build/outputs/apk/debug/app-home-debug.apk);
-# tv.ps1 install ставит только app-tv. Свои строки Watch Next кладёт debug-seed (4 шт., четвёртая на 98% и скрыта).
-# Строки чужих приложений лаунчер без привилегий не видит - это проверяется отдельно, см. docs/plans/launcher.md.
+﻿# M6-H2: Blue Box Home (:app) - смоук главного экрана на эмуляторе.
+# Предусловие: debug-APK поставлен вручную (`gradlew :app:assembleDebug`, затем adb -s emulator-NNNN install -r app/build/outputs/apk/debug/app-debug.apk);
+# `tv.ps1 install` для Home не годится, ставьте `install-home`. Свои строки Watch Next кладёт debug-seed (4 шт., четвёртая на 98% и скрыта).
+# Строки чужих приложений лаунчер без привилегий не видит - это проверяется отдельно, см. docs/plan.md.
 adb "shell am force-stop app.bluebox.home.debug"
 adb "shell am broadcast -a app.bluebox.home.SEED -n app.bluebox.home.debug/app.bluebox.home.SeedReceiver"
 adb "shell am start -n app.bluebox.home.debug/app.bluebox.home.HomeActivity"
@@ -11,10 +11,10 @@ expect-text "Настройки"
 expect-text "Дюна"
 expect-text "Во все тяжкие"
 expect-no-text "Начало"
-expect-focus "Дюна"
-# шестерёнка открывает панель быстрых настроек справа: «Все настройки», плитки, карточки VPN и разработчика
-keys "UP"
-keys "RIGHT*2"
+expect-focus "Магическая битва"
+# дизайн A: левый док; из первой карточки влево - в док, вниз - «Настройки». Они открывают панель быстрых настроек справа: «Все настройки», плитки, карточки VPN и разработчика
+keys "LEFT"
+keys "DOWN"
 expect-focus "Настройки"
 keys "CENTER"
 wait-for "Все настройки" 10
@@ -36,8 +36,8 @@ wait-for "Продолжить просмотр" 10
 keys "BACK"
 expect-text "Продолжить просмотр"
 expect-focus "Настройки"
-# вниз в док до «Все приложения»
-keys "DOWN*3"
+# вверх по доку от «Настройки» через VPN до «Все приложения»
+keys "UP*2"
 expect-focus "Все приложения"
 keys "CENTER"
 wait 2
@@ -45,13 +45,11 @@ wait 2
 keys "BACK"
 wait-for "Продолжить просмотр" 10
 expect-focus "Все приложения"
-# долгое OK на плитке панели открывает редактор: «Добавить» и «Недавнее» (по умолчанию 5 плиток «недавних»)
+# долгое OK на значке приложения в доке открывает редактор: «Добавить» и «Недавнее» (у «Все приложения» долгого OK нет - это не слот)
+keys "UP"
 adb "shell input keyevent --longpress KEYCODE_DPAD_CENTER"
 wait-for "Панель приложений" 10
 expect-text "Добавить"
 expect-text "Недавнее"
-# «Все приложения» - не слот: меню значка не показывается, фокус на «Добавить»
-expect-focus "Добавить"
 keys "BACK"
 wait-for "Продолжить просмотр" 10
-expect-focus "Все приложения"

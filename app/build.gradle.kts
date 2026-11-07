@@ -3,7 +3,7 @@ plugins {
 }
 
 // Blue Box Home (M6-H1): a separate, light launcher APK. Views only, no Compose, no DI, no third-party libraries:
-// the target box (Realtek RTD1325) is render-bound, see docs/plans/launcher.md.
+// the target box (Realtek RTD1325) is render-bound, see docs/plan.md.
 android {
     namespace = "app.bluebox.home"
     compileSdk = libs.versions.compileSdk.get().toInt()

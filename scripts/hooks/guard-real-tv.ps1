@@ -10,8 +10,8 @@ tv.ps1/perf-check.ps1 с -Device tv / -AllowRealTv. Реальный ТВ — т
   2) `powershell [-NoProfile] [-ExecutionPolicy Bypass] -File <путь>tv.ps1 -Device tv -AllowRealTv -Variant beta <подкоманда> [аргументы]`
      — подкоманды: install (без аргументов), start, stop, restart, keys, text, tap, swipe, wait, shot, focus, log, deeplink bluebox://…,
      start-time, adb (tv.ps1 сам пускает на ТВ только `shell getprop|dumpsys`), devices, expect-focus, expect-text, wait-for, expect-alive,
-     expect-no-crash; install-home / start-home / stop-home (без аргументов) — лаунчер Blue Box Home (:app-home, debug-APK из
-     app-home/build/outputs/apk/debug), 2026-11-07 «Разрешаю хук»: только `install -r` готового APK и явный запуск/остановка
+     expect-no-crash; install-home / start-home / stop-home / home-tour (без аргументов) — лаунчер Blue Box Home (:app, debug-APK из
+     app/build/outputs/apk/debug), 2026-11-07 «Разрешаю хук»: только `install -r` готового APK и явный запуск/остановка
      HomeActivity, по умолчанию лаунчером он не становится. Остальное для реального ТВ запрещает сам tv.ps1 (scenario, reset-app, proxy, emu, прочий adb, не-beta установка);
   3) `powershell … -File <путь>perf-check.ps1 -Device tv -AllowRealTv -Variant beta [-Uri main] [-Runs N] [-Baseline none]
      [-Compile none|speed-profile|speed|verify] [-KeyDelayMs N] [-OpenCards N] [-NoPrime]` — замер плавности (D-pad по главной, gfxinfo, meminfo);

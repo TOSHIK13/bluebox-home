@@ -13,6 +13,19 @@
 
 Подкоманды `build`, `install`, `reset-app` и сценарии приложения Blue Box унаследованы из его репозитория и для Home не годятся.
 
+## Окружение (`scripts/env.ps1`)
+Тулчейн лежит вне репозитория; пути задаются переменными, значения по умолчанию — для машины владельца.
+| Переменная | Что | По умолчанию |
+|---|---|---|
+| `BLUEBOX_TOOLS` | каталог с `jdk-home.txt`, `android-sdk`, `android-user-home` | `D:\Ani\.gradle\codex-tools` |
+| `BLUEBOX_GRADLE_HOME` | записываемый Gradle-home | `D:\AI\.bluebox-gradle` |
+| `BLUEBOX_GRADLE_RO_CACHE` | кэш зависимостей только для чтения (необязателен) | `D:\Ani\.gradle\caches` |
+
+Нет JDK/SDK — `verify.ps1` выходит с кодом 2 «ПРОБЛЕМА ОКРУЖЕНИЯ». В worktree `local.properties` копируется из основного чекаута.
+
+## Защита реального ТВ
+`scripts/hooks/guard-real-tv.ps1` подключён как PreToolUse-hook в `.claude/settings.json`: `adb` только с `-s emulator-NNNN`; на ТВ разрешены лишь `install-home`, `start-home`, `stop-home`, `home-tour` через `tv.ps1 -Device tv -AllowRealTv -Variant beta` по команде владельца.
+
 ## Документы
 - `docs/plan.md` — план и решения по лаунчеру.
 - `docs/research/launcher-features.md` — что есть в лаунчерах Android TV.
