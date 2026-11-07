@@ -23,7 +23,7 @@ object DockRules {
 
     const val RECENT = "@recent"
     const val MAX_SLOTS = 8
-    val DEFAULT_SLOTS: List<String> = List(5) { RECENT }
+    val DEFAULT_SLOTS: List<String> = List(4) { RECENT }
 
     /** [app] is null only for a recent slot when there is nothing left to show. */
     data class Slot(val token: String, val app: AppEntry?) { val recent get() = token == RECENT }

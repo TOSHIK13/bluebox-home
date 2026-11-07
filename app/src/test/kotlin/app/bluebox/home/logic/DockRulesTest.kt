@@ -27,9 +27,9 @@ class DockRulesTest {
     private val installed = listOf(a("a", "A"), a("b", "B"), a("c", "C"), a("d", "D"), a("e", "E"), a("f", "F"), a(self, "Home"))
     private fun pkgs(s: List<DockRules.Slot>) = s.map { it.app?.packageName }
 
-    @Test fun `default dock is five recent slots filled newest first`() {
+    @Test fun `default dock is four recent slots (the last row stays free for "+") filled newest first`() {
         val s = DockRules.slots(installed, self, null, recent = listOf("c", self, "gone", "a"))
-        assertEquals(listOf("c", "a", "b", "d", "e"), pkgs(s)) // history first, then the automatic pick
+        assertEquals(listOf("c", "a", "b", "d"), pkgs(s)) // history first, then the automatic pick
     }
 
     @Test fun `fixed app is skipped by recent slots`() {

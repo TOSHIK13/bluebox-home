@@ -59,7 +59,7 @@ class HomeActivity : Activity() {
         apps = Apps(this)
         watchNext = WatchNextSource(this)
         channelSource = ChannelSource(this)
-        posters = Posters(this)
+        posters = Posters(this, cacheSize = 120)
         vpn = VpnMonitor(this, ::showVpn)
         setContentView(buildUi())
     }
@@ -111,12 +111,25 @@ class HomeActivity : Activity() {
 
     /** Rebuilds cards and dock, then puts focus back on the same tile (matched by description). */
     private fun refresh(rows: List<WatchEntry>, channels: List<ChannelRow>, installed: List<AppEntry>, recent: List<String>) {
+        // coming back from Settings or the quick panel usually brings the same data: rebuild only what really changed
+        // (a rebuild resets the shelves' scroll and animation state and reloads every picture)
+        val cardsKey = listOf(rows, channels)
+        val dockKey = listOf(installed, recent, Prefs.dock(this))
+        val cardsSame = cardsKey == lastCardsKey && cardsBuilt
+        val dockSame = dockKey == lastDockKey
+        if (cardsSame && dockSame) return
+        lastCardsKey = cardsKey; lastDockKey = dockKey
         val keep = currentFocus?.takeIf { it.parent === dock || it.parent === dockBottom || blocks.any { b -> it.parent === b.cards } }?.contentDescription?.toString()
-        showCards(rows, channels); showDock(installed, recent)
+        if (!cardsSame) { showCards(rows, channels); cardsBuilt = true }
+        if (!dockSame || !cardsSame) showDock(installed, recent)
         if (editing) { focusEditRow(); return }
         val same = keep?.let { k -> blocks.flatMap { b -> (0 until b.cards.childCount).map { b.cards.getChildAt(it) } }.plus(dockViews()).firstOrNull { it.contentDescription?.toString() == k } }
         if (same != null) same.requestFocus() else ensureFocus()
     }
+
+    private var lastCardsKey: List<Any?>? = null
+    private var lastDockKey: List<Any?>? = null
+    private var cardsBuilt = false
 
     private fun dockViews(): List<View> = (0 until dock.childCount).map { dock.getChildAt(it) } + (0 until dockBottom.childCount).map { dockBottom.getChildAt(it) }
 
@@ -690,7 +703,8 @@ class HomeActivity : Activity() {
         dockItem(getString(R.string.search), null, android.R.drawable.ic_menu_search, -1, round = true) { apps.search() }
         // indexes are positions among the normalized tokens, so the editor and the saved list agree (empty recent slots included)
         tokens = DockRules.normalize(installed, packageName, Prefs.dock(this))
-        val room = maxApps() - (if (editing && tokens.size < DockRules.MAX_SLOTS) 1 else 0)
+        // the last row is always kept free for "+": entering the editor changes nothing, and "+" never pushes an app out
+        val room = maxApps() - 1
         val shown = ArrayList<Int>()
         DockRules.slots(installed, packageName, tokens, recent).forEachIndexed { i, sl ->
             val a = sl.app ?: return@forEachIndexed
