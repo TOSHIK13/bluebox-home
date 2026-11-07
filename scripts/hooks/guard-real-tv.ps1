@@ -12,7 +12,8 @@ tv.ps1/perf-check.ps1 с -Device tv / -AllowRealTv. Реальный ТВ — т
      start-time, adb (tv.ps1 сам пускает на ТВ только `shell getprop|dumpsys`), devices, expect-focus, expect-text, wait-for, expect-alive,
      expect-no-crash; install-home / start-home / stop-home / home-tour (без аргументов) — лаунчер Blue Box Home (:app, debug-APK из
      app/build/outputs/apk/debug), 2026-11-07 «Разрешаю хук»: только `install -r` готового APK и явный запуск/остановка
-     HomeActivity, по умолчанию лаунчером он не становится. Остальное для реального ТВ запрещает сам tv.ps1 (scenario, reset-app, proxy, emu, прочий adb, не-beta установка);
+     HomeActivity, по умолчанию лаунчером он не становится; install-release / start-release (2026-11-08 «Да, ставь на ТВ») — то же для подписанного
+     release-APK (app.bluebox.home, app/build/outputs/apk/release): только `install -r` без понижения версии и явный запуск. Остальное для реального ТВ запрещает сам tv.ps1 (scenario, reset-app, proxy, emu, прочий adb, не-beta установка);
   3) `powershell … -File <путь>perf-check.ps1 -Device tv -AllowRealTv -Variant beta [-Uri main] [-Runs N] [-Baseline none]
      [-Compile none|speed-profile|speed|verify] [-KeyDelayMs N] [-OpenCards N] [-NoPrime]` — замер плавности (D-pad по главной, gfxinfo, meminfo);
   4) `powershell … -File <путь>tv-deploy.ps1 -AllowRealTv [-NoSync] [-ErrLines N]` — fast-forward до origin/main, beta-сборка, установка
@@ -28,7 +29,7 @@ function Block([string]$why) { [Console]::Error.WriteLine("BLOCKED (защита
 
 $tvSubcommands = @('install', 'start', 'stop', 'restart', 'keys', 'text', 'tap', 'swipe', 'wait', 'shot', 'focus', 'log', 'deeplink', 'start-time',
     'adb', 'devices', 'expect-focus', 'expect-text', 'wait-for', 'expect-alive', 'expect-no-crash',
-    'install-home', 'start-home', 'stop-home', 'home-tour')
+    'install-home', 'start-home', 'stop-home', 'home-tour', 'install-release', 'start-release')
 
 # Разбирает одну простую строку `powershell … -File <script> <аргументы>`; возвращает @{ Script; Args } или $null
 function Split-PowerShellCall([string]$c) {
@@ -64,7 +65,7 @@ function Test-TvScript($call) {
         else { $subArgs += $t; $i += 1 }
     }
     if (-not ($device -and $allow -and $variant) -or $null -eq $sub -or $sub -cnotin $tvSubcommands) { return $false }
-    if ($sub -in @('install', 'install-home', 'start-home', 'stop-home', 'home-tour') -and $subArgs.Count -gt 0) { return $false }
+    if ($sub -in @('install', 'install-home', 'start-home', 'stop-home', 'home-tour', 'install-release', 'start-release') -and $subArgs.Count -gt 0) { return $false }
     if ($sub -eq 'deeplink' -and ($subArgs.Count -ne 1 -or $subArgs[0].Trim('"') -notmatch '^bluebox://[\w/.-]*$')) { return $false }
     return $true
 }

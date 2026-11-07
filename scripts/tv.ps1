@@ -903,6 +903,14 @@ function Invoke-OneCore([string]$cmd, [string[]]$t) {
         'home-shot' { Take-Shot 'hs'; AdbShell 'dumpsys package app.bluebox.home.debug | grep READ_TV_LISTINGS' }
         'start-home' { AdbQuiet shell am start -n app.bluebox.home.debug/app.bluebox.home.HomeActivity; 'home started' }
         'stop-home' { AdbQuiet shell am force-stop app.bluebox.home.debug; 'home stopped' }
+        # signed release of Home (applicationId app.bluebox.home) for the real TV (owner: «Да, ставь на ТВ», 2026-11-08): `install -r` only,
+        # never a downgrade; the launcher is started explicitly and does not become the default Home by itself.
+        'install-release' {
+            $relApk = Join-Path $repo 'appuild\outputspkeleasepp-release.apk'
+            if (-not (Test-Path $relApk)) { throw "no APK: build it first (gradlew :app:assembleRelease): $relApk" }
+            AdbQuiet install -r $relApk; "installed: $relApk -> $serial"
+        }
+        'start-release' { AdbQuiet shell am start -n app.bluebox.home/.HomeActivity; 'release home started' }
         'start' { Launch-App; 'started' }
         'stop' { AdbQuiet shell am force-stop $pkg; 'stopped' }
         'restart' { AdbQuiet shell am force-stop $pkg; Launch-App; 'restarted' }
@@ -990,7 +998,7 @@ function Split-Line([string]$line) {
 
 # command -> minimum number of arguments (for -DryRun validation)
 $knownCommands = @{
-    'devices' = 0; 'emu' = 0; 'build' = 0; 'install' = 0; 'install-home' = 0; 'home-tour' = 0; 'home-grant' = 0; 'home-listings' = 0; 'home-shot' = 0; 'start-home' = 0; 'stop-home' = 0; 'start' = 0; 'stop' = 0; 'restart' = 0; 'reset-app' = 0; 'start-time' = 0
+    'devices' = 0; 'emu' = 0; 'build' = 0; 'install' = 0; 'install-home' = 0; 'home-tour' = 0; 'home-grant' = 0; 'home-listings' = 0; 'home-shot' = 0; 'start-home' = 0; 'stop-home' = 0; 'install-release' = 0; 'start-release' = 0; 'start' = 0; 'stop' = 0; 'restart' = 0; 'reset-app' = 0; 'start-time' = 0
     'keys' = 1; 'tap' = 2; 'tap-text' = 1; 'swipe' = 4; 'text' = 1; 'wait' = 1; 'shot' = 0; 'focus' = 0; 'log' = 0; 'deeplink' = 1; 'proxy' = 1; 'adb' = 1
     'expect-focus' = 1; 'expect-text' = 1; 'expect-no-text' = 1; 'wait-for' = 1; 'expect-alive' = 0; 'expect-no-crash' = 0; 'expect-playing' = 0
     'expect-query' = 2; 'expect-prop' = 2
