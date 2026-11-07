@@ -8,6 +8,9 @@
     <string name="open_bluebox">Открыть Blue Box</string>
     <string name="settings">Настройки</string>
     <string name="search">Поиск</string>
+    <string name="search_hint">Поиск фильмов, сериалов и аниме</string>
+    <string name="backdrop_on">Фон: постер</string>
+    <string name="backdrop_off">Фон: тёмный</string>
     <string name="all_apps">Все приложения</string>
     <string name="vpn">VPN</string>
     <string name="vpn_on">VPN включён</string>

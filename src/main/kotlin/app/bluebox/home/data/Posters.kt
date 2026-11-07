@@ -12,10 +12,10 @@ import java.net.URL
 import java.util.concurrent.Executors
 
 /** Minimal poster loader (no Coil: the home APK stays dependency-free). Decodes down to the card size. */
-class Posters(private val context: Context) {
+class Posters(private val context: Context, cacheSize: Int = 24) {
     private val pool = Executors.newFixedThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
-    private val cache = object : LruCache<String, Bitmap>(24) {}
+    private val cache = object : LruCache<String, Bitmap>(cacheSize) {}
 
     fun load(uri: String, reqW: Int, reqH: Int, done: (Bitmap?) -> Unit) {
         cache.get(uri)?.let { done(it); return }

@@ -19,6 +19,7 @@ import app.bluebox.home.data.Posters
 import app.bluebox.home.data.VpnMonitor
 import app.bluebox.home.data.WatchNextSource
 import app.bluebox.home.logic.AppEntry
+import app.bluebox.home.logic.BackdropRules
 import app.bluebox.home.logic.DockRules
 import app.bluebox.home.logic.EntryRules
 import app.bluebox.home.logic.VpnState
@@ -39,9 +40,14 @@ class HomeActivity : Activity() {
     private lateinit var dock: LinearLayout
     private lateinit var cardsScroll: HorizontalScrollView
     private var focusSet = false
+    private lateinit var backdrop: ImageView
+    private lateinit var backdropScrim: View
+    private val backdropHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private lateinit var backdrops: Posters
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        backdrops = Posters(this, cacheSize = 3)
         apps = Apps(this)
         watchNext = WatchNextSource(this)
         posters = Posters(this)
@@ -61,7 +67,10 @@ class HomeActivity : Activity() {
 
     override fun onPause() { vpn.stop(); super.onPause() }
 
-    override fun onDestroy() { io.shutdownNow(); posters.shutdown(); super.onDestroy() }
+    override fun onDestroy() {
+        backdropHandler.removeCallbacksAndMessages(null)
+        io.shutdownNow(); posters.shutdown(); backdrops.shutdown(); super.onDestroy()
+    }
 
     /** Home never exits on Back. */
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
@@ -98,7 +107,51 @@ class HomeActivity : Activity() {
         root.addView(space(0, 0).apply { layoutParams = lp(0, 0, 1f) })
         dock = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         root.addView(dock, lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        return root
+
+        // Default look is the flat dark background; the focused card's backdrop sits under a static scrim (no blur, no crossfade).
+        backdrop = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; visibility = View.GONE }
+        val scrim = View(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.argb(200, 15, 22, 27), Color.argb(150, 15, 22, 27), Color.argb(245, 15, 22, 27)),
+            )
+        }
+        backdropScrim = scrim.also { it.visibility = View.GONE }
+        return FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#0f161b"))
+            addView(backdrop, FrameLayout.LayoutParams(-1, -1))
+            addView(scrim, FrameLayout.LayoutParams(-1, -1))
+            addView(root, FrameLayout.LayoutParams(-1, -1))
+        }
+    }
+
+    private fun backdropOn() = Prefs.backdrop(this)
+
+    override fun onStart() {
+        super.onStart()
+        if (!backdropOn()) hideBackdrop() // the toggle lives on the "All apps" screen
+    }
+
+    private fun onCardFocus(e: WatchEntry, focused: Boolean) {
+        backdropHandler.removeCallbacksAndMessages(null)
+        if (!focused) {
+            // focus left the card (to a neighbour card the next callback re-arms; to the dock/pills we clear)
+            backdropHandler.postDelayed({ if (cards.focusedChild == null) hideBackdrop() }, BackdropRules.DELAY_MS)
+            return
+        }
+        if (!backdropOn()) return
+        val uri = BackdropRules.pick(e) ?: return
+        backdropHandler.postDelayed({
+            backdrops.load(uri, 960, 540) { bmp ->
+                if (bmp != null && cards.focusedChild != null && backdropOn()) {
+                    backdrop.setImageBitmap(bmp); backdrop.visibility = View.VISIBLE; backdropScrim.visibility = View.VISIBLE
+                }
+            }
+        }, BackdropRules.DELAY_MS)
+    }
+
+    private fun hideBackdrop() {
+        backdrop.visibility = View.GONE; backdropScrim.visibility = View.GONE; backdrop.setImageDrawable(null)
     }
 
     private fun topBar(): View {
@@ -113,18 +166,35 @@ class HomeActivity : Activity() {
             textSize = 14f; setTextColor(Tok.text72); includeFontPadding = false
         }
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(time); addView(date) }
-        bar.addView(left, lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        bar.addView(left, lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        bar.addView(searchBar(), lp(0, dp(44), 1f).apply { leftMargin = dp(24); rightMargin = dp(24) })
 
         val pill = pill(getString(R.string.vpn)) { apps.vpnSettings() }
         vpnDot = pill.getChildAt(0)
         vpnText = pill.getChildAt(1) as TextView
         bar.addView(pill, lp(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)))
         bar.addView(space(8))
-        bar.addView(pill(getString(R.string.search), withDot = false) { apps.search() }, lp(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)))
-        bar.addView(space(8))
         bar.addView(pill(getString(R.string.settings), withDot = false) { apps.settings() }, lp(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)))
         showVpn(VpnState.Off)
         return bar
+    }
+
+    /** Wide search field: stretches between the clock and the chips, opens Blue Box search on OK. */
+    private fun searchBar(): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(18), 0, dp(18), 0)
+            plate(22)
+            contentDescription = getString(R.string.search)
+            setOnClickListener { apps.search() }
+        }
+        val icon = ImageView(this).apply { setImageResource(android.R.drawable.ic_menu_search); alpha = 0.8f }
+        row.addView(icon, lp(dp(20), dp(20)))
+        val hint = label(getString(R.string.search_hint), 15, Tok.text72).apply { maxLines = 1; setPadding(dp(12), 0, 0, 0) }
+        row.addView(hint, lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        row.flipTexts(listOf(hint))
+        return row
     }
 
     /** Chip: 36 dp tall, optional status dot, white plate on focus. */
@@ -166,6 +236,7 @@ class HomeActivity : Activity() {
             plate(12)
             setOnClickListener { e.intentUri?.let(apps::launchUri) }
             contentDescription = e.title
+            setOnFocusChangeListener { _, f -> onCardFocus(e, f) }
         }
         val image = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setPadding(dp(3), dp(3), dp(3), dp(3)) }
         frame.addView(image, FrameLayout.LayoutParams(-1, -1))

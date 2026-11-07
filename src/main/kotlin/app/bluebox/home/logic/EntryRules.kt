@@ -11,6 +11,7 @@ data class WatchEntry(
     val durationMs: Long,
     val lastEngagementMs: Long,
     val sourcePackage: String?,
+    val thumbUri: String? = null,
 )
 
 /** Selection and wording rules for the rows; kept free of Android so they run as plain JVM unit tests. */

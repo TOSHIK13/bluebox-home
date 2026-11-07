@@ -39,6 +39,14 @@ class AllAppsActivity : Activity() {
         ).forEach { (name, go) ->
             system.addView(chip(name) { go() }, lp(dp(140), dp(48)).apply { rightMargin = dp(12) })
         }
+        val bgLabel = { getString(if (Prefs.backdrop(this)) R.string.backdrop_on else R.string.backdrop_off) }
+        val bgText = label(bgLabel(), 14, bold = true)
+        val bgChip = centered(bgText, dp(180), dp(48)).apply {
+            plate(12)
+            setOnClickListener { Prefs.setBackdrop(this@AllAppsActivity, !Prefs.backdrop(this@AllAppsActivity)); bgText.text = bgLabel() }
+        }
+        bgChip.flipTexts(listOf(bgText))
+        system.addView(bgChip, lp(dp(180), dp(48)))
         root.addView(system)
         root.addView(space(0, 20))
         root.addView(label(getString(R.string.all_apps), 16, Tok.text72, bold = true))
