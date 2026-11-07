@@ -91,6 +91,7 @@ class HomeActivity : Activity() {
         super.onResume()
         askPermissions()
         vpn.start()
+        Thread { runCatching { app.bluebox.home.data.UpdateCheck.maybe(applicationContext) } }.start()
         // a failure here must never take the launcher process down (it would restart in a loop)
         runCatching {
             io.execute {

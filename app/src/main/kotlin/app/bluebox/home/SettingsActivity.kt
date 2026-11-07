@@ -82,6 +82,10 @@ class SettingsActivity : Activity() {
             startActivity(android.content.Intent(this, ChannelsActivity::class.java))
         }
 
+        section(getString(R.string.updates_title))
+        row(getString(R.string.updates_title), Prefs.updateFound(this)?.let { getString(R.string.updates_available, it) },
+            BuildConfig.VERSION_NAME) { startActivity(android.content.Intent(this, UpdatesActivity::class.java)) }
+
         section(getString(R.string.sec_search))
         row(getString(R.string.search_where), apps.searchTarget() ?: getString(R.string.search_none), null) { apps.search() }
         diagnostics()

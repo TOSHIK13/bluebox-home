@@ -89,4 +89,25 @@ object Prefs {
     fun setBackdrop(c: Context, on: Boolean) {
         c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean(BACKDROP, on).apply()
     }
+
+    /** Updates: daily background check (on by default), beta channel (off), when it last ran, tag found newer than installed. */
+    fun updateAuto(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean("update_auto", true)
+
+    fun setUpdateAuto(c: Context, on: Boolean) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("update_auto", on).apply()
+    }
+
+    fun updateBeta(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean("update_beta", false)
+
+    fun setUpdateBeta(c: Context, on: Boolean) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("update_beta", on).putString("update_found", null).apply()
+    }
+
+    fun updateCheckedAt(c: Context): Long = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getLong("update_checked", 0)
+
+    fun updateFound(c: Context): String? = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString("update_found", null)
+
+    fun setUpdateResult(c: Context, nowMs: Long, newerTag: String?) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putLong("update_checked", nowMs).putString("update_found", newerTag).apply()
+    }
 }

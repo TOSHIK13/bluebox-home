@@ -80,4 +80,22 @@
     <string name="badge_movie">Фильм</string>
     <string name="badge_se">С%1$s · Е%2$s</string>
     <string name="badge_e">Е%1$s</string>
+    <string name="updates_title">Обновления</string>
+    <string name="updates_help">Новые версии Home берутся из релизов на GitHub. Перед установкой проверяются контрольная сумма и подпись; подтвердить установку нужно пультом.</string>
+    <string name="updates_installed">Установлена</string>
+    <string name="updates_latest_title">Последняя версия</string>
+    <string name="updates_check">Проверить сейчас</string>
+    <string name="updates_checking">Проверяю…</string>
+    <string name="updates_latest">Установлена последняя версия</string>
+    <string name="updates_install">Скачать и установить</string>
+    <string name="updates_no_files">В релизе нет APK или файла контрольной суммы</string>
+    <string name="updates_downloading">Скачиваю… %1$d%%</string>
+    <string name="updates_confirm">Подтвердите установку в окне системы</string>
+    <string name="updates_checked_at">Проверено: %1$s</string>
+    <string name="updates_available">Доступна версия %1$s</string>
+    <string name="updates_settings">Параметры</string>
+    <string name="updates_auto">Проверять автоматически</string>
+    <string name="updates_auto_hint">Раз в сутки при открытии Home, без сообщений</string>
+    <string name="updates_beta">Бета-версии</string>
+    <string name="updates_beta_hint">Предварительные релизы (v1.0.0-beta.1), могут быть нестабильны</string>
 </resources>
