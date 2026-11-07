@@ -1,6 +1,6 @@
 # Blue Box Home — лёгкий лаунчер (M6-H1, M6-H2)
 
-Основа — макет B (артефакт `9X9HE9BfZvxpyHRL2wXBJD`, v11). Отдельный APK `app.bluebox.home` (модуль `:app-home`), Views без Compose и DI: приставка Ugoos (Realtek RTD1325) упирается в отрисовку.
+Основа — макет B (артефакт `9X9HE9BfZvxpyHRL2wXBJD`, v11). Отдельный APK `app.bluebox.home` (модуль `:app`), Views без Compose и DI: приставка Ugoos (Realtek RTD1325) упирается в отрисовку.
 
 ## Границы
 - Только Home: часы, «Продолжить просмотр» (Watch Next), VPN-пилюля, Поиск, Настройки, док из 4 приложений + «Все приложения» (там же «Система»: Настройки, Wi-Fi, Bluetooth, VPN).
@@ -8,8 +8,8 @@
 - Логика — чистые классы `logic/` (`EntryRules`, `VpnRules`, `DockRules`) с unit-тестами; Android-часть — `data/` и два Activity.
 
 ## Куски
-1. Модуль, логика, тесты → `verify.ps1 -Only ":app-home:testDebugUnitTest"`.
-2. UI, Watch Next, VPN → сборка `:app-home:assembleDebug`.
+1. Модуль, логика, тесты → `verify.ps1 -Only ":app:testDebugUnitTest"`.
+2. UI, Watch Next, VPN → сборка `:app:assembleDebug`.
 3. Смоук на эмуляторе → `tv.ps1 scenario scripts/scenarios/m6-home-smoke.txt` (M6-H2).
 
 ## Риск данных

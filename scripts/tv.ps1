@@ -102,15 +102,14 @@ $enc = New-Object System.Text.UTF8Encoding($false)
 $OutputEncoding = $enc
 try { . (Join-Path $PSScriptRoot 'env.ps1') }
 catch { [Console]::Error.WriteLine($_.Exception.Message); exit 2 }
-. (Join-Path $PSScriptRoot 'evidence.ps1')
 
 $repo = $bbRoot
 # One folder per worktree: parallel sessions never read each other's fail.png ($PSScriptRoot is empty in a param default on PS 5.1).
 if (-not $Out) { $Out = Join-Path (Join-Path $env:TEMP 'bluebox-shots') (Split-Path -Leaf $bbRoot) }
-$appId = 'app.bluebox.tv'
+$appId = 'app.bluebox.home'
 $suffix = if ($Variant -eq 'beta') { '.beta' } else { '.debug' }
 $pkg = "$appId$suffix"
-$activity = "$pkg/$appId.MainActivity"
+$activity = "$pkg/$appId.HomeActivity"
 $serial = switch ($Device) { 'emu' { 'emulator-5554' } 'tv' { '192.168.1.151:5555' } default { $Device } }
 $isEmulator = $serial -match '^(emulator-\d+|auto)$'   # 'auto' is resolved to a leased emulator before the command runs
 $adbExe = Join-Path $env:ANDROID_HOME 'platform-tools\adb.exe'
@@ -868,7 +867,7 @@ function Invoke-OneCore([string]$cmd, [string[]]$t) {
             # (Realtek rtd1325: first start 1.9 s -> 0.65 s, frames 215 -> 500 in the same D-pad scenario after AOT). Compile OUR package right away.
             if ($apk -match 'beta') { $c = (AdbShell "cmd package compile -m speed -f $pkg" | Out-String).Trim(); "compile -m speed: $c" }
         }
-        # Blue Box Home (:app-home) debug APK for the real TV (owner allowed 2026-11-07: «Разрешаю хук»). Only -r install of the
+        # Blue Box Home (:app) debug APK for the real TV (owner allowed 2026-11-07: «Разрешаю хук»). Only -r install of the
         # prebuilt APK; the launcher is only started explicitly - it never becomes the default Home by itself.
         'install-home' {
             $homeApk = Join-Path $repo 'app\build\outputs\apk\debug\app-debug.apk'
@@ -1099,19 +1098,13 @@ function Run-Scenario([string]$file) {
         $res.Exit = 3; $res.Result = 'FAIL'; $res.Class = 'BUSY'
     } elseif ($failed) {
         Write-Output 'SCENARIO FAIL'
-        Write-ScenarioTriage $repo $serial $scenarioName $firstFail
-        $res.Exit = 1; $res.Result = 'FAIL'; $res.Class = if ($firstFail) { Get-FailClass $firstFail } else { '' }
+        $res.Exit = 1; $res.Result = 'FAIL'; $res.Class = ''
         if ($res.Net) {
             $res.Class = 'NET'
             Write-Output 'NET: на экране ошибка сети (каталог не ответил) — сбой среды, не кода: проверь сеть эмулятора (`tv.ps1 proxy on`), код не трогай'
         }
     } else {
         Write-Output 'SCENARIO PASS'
-        Clear-ScenarioFails $serial $scenarioName
-        $t = $script:Tm
-        Write-Receipt $repo "scenario-$scenarioName" @{ kind = 'scenario'; name = $scenarioName; result = 'PASS'; device = $serial
-            timing = @{ total = $res.Secs; dump = [math]::Round($t.dump, 1); dumps = $t.dumps; cached = $t.hits; query = [math]::Round($t.query, 1); queries = $t.queries; wait = [math]::Round($t.wait, 1)
-                        start = [math]::Round($t.start, 1); keys = [math]::Round($t.keys, 1); other = [math]::Round($t.other, 1) } }
     }
 }
 
