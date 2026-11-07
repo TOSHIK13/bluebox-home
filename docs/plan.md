@@ -13,7 +13,7 @@
 3. Смоук на эмуляторе → `tv.ps1 scenario scripts/scenarios/m6-home-smoke.txt` (M6-H2).
 
 ## Данные Watch Next
-Контракт — строки `TvContract.WatchNextPrograms` от Blue Box (`docs/contracts.md` в репозитории Blue Box).
+Контракт — строки `TvContract.WatchNextPrograms` от Blue Box (`docs/contracts.md` в репозитории Blue Box). Полное описание полей и правил — `docs/watch-next-contract.md`.
 - **Доступ.** Home запрашивает `READ_TV_LISTINGS` (`dangerous`, runtime-диалог, права лаунчера не нужны; проверено на реальном ТВ 2026-11-07, `docs/research/launcher-android-tv.md`). С ним TvProvider отдаёт строки `package_name = Home OR searchable = 1` (у строк по умолчанию 1), запрос только без `selection`: `WatchNextSource` так и делает. Без разрешения (`READ_EPG_DATA` выдать нельзя) видны лишь свои строки: на эмуляторе 2026-11-01 две копии Home видели каждая только свои.
 - **Результат.** По скриншотам владельца (2026-11-07) Home выводит строки Blue Box на ТВ: заголовок, бейдж «С·Е»/«Фильм», полоса прогресса. Сами скриншоты в репозиторий не добавлены.
 - **Картинки.** Blue Box пишет постер 2:3 в `poster_art_uri` и бэкдроп 16:9 в `thumbnail_uri` (Blue Box PR #160, 2026-11-07). Home берёт `thumbnail_uri`, при его отсутствии `poster_art_uri`.
