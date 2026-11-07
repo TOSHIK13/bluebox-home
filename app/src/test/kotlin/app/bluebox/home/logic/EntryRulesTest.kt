@@ -47,4 +47,19 @@ class EntryRulesTest {
         assertEquals("1:01:01", EntryRules.clock(3_661_000))
         assertEquals("0:00", EntryRules.clock(-5))
     }
+
+    @Test fun `episode tag from season and episode`() {
+        assertEquals(EpisodeTag("2", "5", false), EntryRules.episodeTag(e(1).copy(season = "2", episode = "5")))
+        assertEquals(EpisodeTag(null, "7", false), EntryRules.episodeTag(e(1).copy(season = "0", episode = "7")))
+        assertEquals(EpisodeTag(null, null, true), EntryRules.episodeTag(e(1).copy(contentType = EntryRules.TYPE_MOVIE)))
+        assertNull(EntryRules.episodeTag(e(1)))
+    }
+
+    @Test fun `new episode is flagged until started`() {
+        assertEquals(true, EntryRules.isNew(e(1).copy(watchNextType = EntryRules.WN_NEXT)))
+        assertEquals(true, EntryRules.isNew(e(1).copy(watchNextType = EntryRules.WN_NEW)))
+        assertEquals(false, EntryRules.isNew(e(1, pos = 60_000, dur = 1_200_000).copy(watchNextType = EntryRules.WN_NEXT)))
+        assertEquals(false, EntryRules.isNew(e(1).copy(watchNextType = 0)))
+        assertEquals(false, EntryRules.isNew(e(1)))
+    }
 }

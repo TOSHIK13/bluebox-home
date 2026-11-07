@@ -55,4 +55,8 @@
     <string name="notice_access_hint">VPN, режим разработчика и другие. Нужно один раз разрешить доступ к уведомлениям.</string>
     <string name="vpn_card_hint">Нажмите, чтобы открыть настройки VPN</string>
     <string name="no_app">Не удалось открыть: %1$s</string>
+    <string name="badge_new">НОВАЯ</string>
+    <string name="badge_movie">Фильм</string>
+    <string name="badge_se">С%1$s · Е%2$s</string>
+    <string name="badge_e">Е%1$s</string>
 </resources>

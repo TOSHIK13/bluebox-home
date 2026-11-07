@@ -12,6 +12,8 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.graphics.drawable.StateListDrawable
 import android.widget.TextClock
 import android.widget.TextView
 import app.bluebox.home.data.Apps
@@ -27,7 +29,7 @@ import app.bluebox.home.logic.VpnState
 import app.bluebox.home.logic.WatchEntry
 import java.util.concurrent.Executors
 
-/** Home screen "B": clock, VPN and settings on top, "continue watching" row, dock of apps. Plain Views. */
+/** Home screen "A": left dock of apps, full-bleed backdrop, title over a row of wide "continue watching" cards. Plain Views. */
 class HomeActivity : Activity() {
     private lateinit var apps: Apps
     private lateinit var watchNext: WatchNextSource
@@ -123,46 +125,86 @@ class HomeActivity : Activity() {
         cardsScroll.smoothScrollTo(0, 0)
     }
 
-    // ---- UI ----
+    // ---- UI (design A: dock on the left, backdrop full-bleed, title over a row of wide cards) ----
+
+    private lateinit var dockPanel: FrameLayout
+    private lateinit var dockScroll: ScrollView
+    private lateinit var titleView: TextView
+    private lateinit var content: View
+    private val dockLabels = ArrayList<TextView>()
+    private var dockExpanded = false
 
     private fun buildUi(): View {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0f161b"))
-            setPadding(dp(Tok.SAFE_X), dp(Tok.SAFE_Y), dp(Tok.SAFE_X), dp(18))
-        }
-        root.addView(topBar())
-        // empty space goes above "continue watching": the row sits low, right over the dock
-        root.addView(space(0, 0).apply { layoutParams = lp(0, 0, 1f) })
-        root.addView(label(getString(R.string.continue_watching), 16, Tok.text72, bold = true))
-        root.addView(space(0, 10))
-        cards = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false }
-        cardsScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            clipToPadding = false
-            isFillViewport = false
-            addView(cards)
-        }
-        root.addView(cardsScroll, lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        root.addView(space(0, 28))
-        dock =LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        root.addView(dock, lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val root = FrameLayout(this).apply { setBackgroundColor(Tok.surface); clipChildren = false }
 
-        // Default look is the flat dark background; the focused card's backdrop sits under a static scrim (no blur, no crossfade).
         backdrop = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; visibility = View.GONE }
-        val scrim = View(this).apply {
+        root.addView(backdrop, FrameLayout.LayoutParams(-1, -1))
+        // static scrims: darker on the left (under the dock and the title), darker at the bottom (under the cards)
+        backdropScrim = View(this).apply { visibility = View.GONE; setBackgroundColor(Color.argb(60, 21, 33, 42)) }
+        root.addView(backdropScrim, FrameLayout.LayoutParams(-1, -1))
+        root.addView(View(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.argb(179, 21, 33, 42), Color.argb(0, 21, 33, 42)),
+            )
+        }, FrameLayout.LayoutParams(resources.displayMetrics.widthPixels * 55 / 100, -1))
+        root.addView(View(this).apply {
             background = android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.argb(200, 15, 22, 27), Color.argb(150, 15, 22, 27), Color.argb(245, 15, 22, 27)),
+                intArrayOf(Color.argb(0, 21, 33, 42), Color.argb(235, 21, 33, 42)),
             )
+        }, FrameLayout.LayoutParams(-1, dp(250), Gravity.BOTTOM))
+
+        // title block + cards, bottom-anchored, 104 dp from the left edge (72 dock + 32 gap)
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
+        column.addView(label(getString(R.string.continue_watching), 14, Tok.text72, bold = true), lp(-2, -2).apply { leftMargin = dp(16) })
+        titleView = label("", 42).apply {
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            setShadowLayer(dp(8).toFloat(), 0f, dp(1).toFloat(), Color.argb(130, 0, 0, 0))
         }
-        backdropScrim = scrim.also { it.visibility = View.GONE }
-        return FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#0f161b"))
-            addView(backdrop, FrameLayout.LayoutParams(-1, -1))
-            addView(scrim, FrameLayout.LayoutParams(-1, -1))
-            addView(root, FrameLayout.LayoutParams(-1, -1))
+        column.addView(titleView, lp(-1, -2).apply { topMargin = dp(4); leftMargin = dp(16) })
+        cards = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; setPadding(dp(16), 0, dp(16), 0) }
+        cardsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false; clipToPadding = false; clipChildren = false; isFillViewport = false
+            addView(cards)
         }
+        column.addView(cardsScroll, lp(-1, dp(104)).apply { topMargin = dp(22) })
+        content = column
+        root.addView(column, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { leftMargin = dp(88); bottomMargin = dp(44) })
+
+        // clock top-right
+        val time = TextClock(this).apply {
+            format24Hour = "HH:mm"; format12Hour = "HH:mm"; textSize = 22f; setTextColor(Tok.text); includeFontPadding = false
+            setShadowLayer(dp(6).toFloat(), 0f, dp(1).toFloat(), Color.argb(130, 0, 0, 0))
+        }
+        root.addView(time, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(28); rightMargin = dp(48) })
+
+        // dock on the left; grows to 240 dp with captions while focus is inside
+        dock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(20), dp(14), dp(20)) }
+        dockScroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(dock) }
+        dockPanel = FrameLayout(this).apply { setBackgroundColor(Color.argb(115, 10, 14, 18)); addView(dockScroll, FrameLayout.LayoutParams(-1, -1)) }
+        root.addView(dockPanel, FrameLayout.LayoutParams(dp(72), -1))
+        root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now -> setDockExpanded(now != null && isInDock(now)) }
+
+        vpnDot = View(this); vpnButton = View(this) // replaced when the dock is built
+        showVpn(VpnState.Off)
+        return root
+    }
+
+    private fun isInDock(v: View): Boolean {
+        var p: android.view.ViewParent? = v.parent
+        while (p != null) { if (p === dockPanel) return true; p = p.parent }
+        return false
+    }
+
+    private fun setDockExpanded(on: Boolean) {
+        if (on == dockExpanded) return
+        dockExpanded = on
+        dockPanel.layoutParams = dockPanel.layoutParams.apply { width = dp(if (on) 240 else 72) }
+        dockPanel.setBackgroundColor(Color.argb(if (on) 209 else 115, 10, 14, 18))
+        dockPanel.elevation = if (on) dp(8).toFloat() else 0f
+        content.alpha = if (on) 0.7f else 1f // as in A3: the content stays in place, slightly dimmed
+        dockLabels.forEach { it.visibility = if (on) View.VISIBLE else View.GONE }
     }
 
     private fun backdropOn() = Prefs.backdrop(this)
@@ -175,10 +217,11 @@ class HomeActivity : Activity() {
     private fun onCardFocus(e: WatchEntry, focused: Boolean) {
         backdropHandler.removeCallbacksAndMessages(null)
         if (!focused) {
-            // focus left the card (to a neighbour card the next callback re-arms; to the dock/pills we clear)
+            // focus left the card (to a neighbour card the next callback re-arms; to the dock we clear)
             backdropHandler.postDelayed({ if (cards.focusedChild == null) hideBackdrop() }, BackdropRules.DELAY_MS)
             return
         }
+        titleView.text = e.title
         if (!backdropOn()) return
         val uri = BackdropRules.pick(e) ?: return
         backdropHandler.postDelayed({
@@ -194,66 +237,6 @@ class HomeActivity : Activity() {
         backdrop.visibility = View.GONE; backdropScrim.visibility = View.GONE; backdrop.setImageDrawable(null)
     }
 
-    private fun topBar(): View {
-        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val time = TextClock(this).apply {
-            format24Hour = "HH:mm"; format12Hour = "HH:mm"
-            textSize = 40f; setTextColor(Tok.text); includeFontPadding = false
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        val date = TextClock(this).apply {
-            format24Hour = "EEEE, d MMMM"; format12Hour = "EEEE, d MMMM"
-            textSize = 14f; setTextColor(Tok.text72); includeFontPadding = false
-        }
-        time.textSize = 32f
-        date.textSize = 12f
-        date.gravity = Gravity.END
-        time.gravity = Gravity.END
-        val clock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(time); addView(date) }
-        bar.addView(searchBar(), lp(0, dp(44), 1f).apply { rightMargin = dp(16) })
-
-        val vpnBtn = iconButton(R.drawable.ic_vpn, getString(R.string.vpn), withDot = true) { apps.vpnSettings() }
-        vpnBtn.tag = "vpn"
-        vpnDot = (vpnBtn as FrameLayout).getChildAt(1)
-        vpnButton = vpnBtn
-        bar.addView(vpnBtn, lp(dp(44), dp(44)))
-        bar.addView(space(8))
-        bar.addView(iconButton(R.drawable.ic_settings, getString(R.string.settings)) { startActivity(android.content.Intent(this, QuickSettingsActivity::class.java)) }, lp(dp(44), dp(44)))
-        bar.addView(space(24))
-        bar.addView(clock, lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        showVpn(VpnState.Off)
-        return bar
-    }
-
-    /** Round 44 dp icon button; the icon flips dark on the white focus plate. Optional status dot in the corner. */
-    private fun iconButton(res: Int, desc: String, withDot: Boolean = false, onClick: () -> Unit): View {
-        val box = FrameLayout(this).apply { plate(22); contentDescription = desc; setOnClickListener { onClick() } }
-        val icon = ImageView(this).apply { setImageResource(res); setColorFilter(Tok.text) }
-        box.addView(icon, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
-        if (withDot) box.addView(View(this).apply { background = rounded(Tok.off, dp(4).toFloat()) },
-            FrameLayout.LayoutParams(dp(9), dp(9), Gravity.TOP or Gravity.END).apply { topMargin = dp(8); rightMargin = dp(8) })
-        box.setOnFocusChangeListener { _, f -> icon.setColorFilter(if (f) Tok.onPlate else Tok.text) }
-        return box
-    }
-
-    /** Wide search field: stretches between the clock and the chips, opens Blue Box search on OK. */
-    private fun searchBar(): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(18), 0, dp(18), 0)
-            plate(22)
-            contentDescription = getString(R.string.search)
-            setOnClickListener { apps.search() }
-        }
-        val icon = ImageView(this).apply { setImageResource(android.R.drawable.ic_menu_search); alpha = 0.8f }
-        row.addView(icon, lp(dp(20), dp(20)))
-        val hint = label(getString(R.string.search_hint), 15, Tok.text72).apply { maxLines = 1; setPadding(dp(12), 0, 0, 0) }
-        row.addView(hint, lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.flipTexts(listOf(hint))
-        return row
-    }
-
     private fun showVpn(s: VpnState) {
         val (color, textRes) = when (s) {
             VpnState.On -> Tok.ok to R.string.vpn_on
@@ -267,8 +250,9 @@ class HomeActivity : Activity() {
 
     private fun showCards(rows: List<WatchEntry>) {
         cards.removeAllViews()
-        if (rows.isEmpty()) { cards.addView(emptyCard()); return }
-        rows.forEach { cards.addView(card(it), lp(dp(200), dp(112)).apply { rightMargin = dp(16) }) }
+        if (rows.isEmpty()) { titleView.text = ""; cards.addView(emptyCard()); return }
+        rows.forEach { cards.addView(card(it), lp(dp(168), dp(94)).apply { rightMargin = dp(16); gravity = Gravity.CENTER_VERTICAL }) }
+        titleView.text = rows.first().title
     }
 
     /**
@@ -281,36 +265,49 @@ class HomeActivity : Activity() {
         return android.graphics.Matrix().apply { setScale(s, s); postTranslate((w - bmp.width * s) / 2f, (h - bmp.height * s) / 2f) }
     }
 
+    /** Small dark chip over the picture (episode tag) or an accent chip ("НОВАЯ"). */
+    private fun chip(text: String, fill: Int, gravity: Int, left: Int, top: Int, bottom: Int): TextView =
+        label(text, 11, Tok.text, bold = true).apply {
+            this.gravity = Gravity.CENTER
+            setPadding(dp(6), 0, dp(6), 0)
+            background = rounded(fill, dp(3).toFloat())
+            layoutParams = FrameLayout.LayoutParams(-2, dp(18), gravity).apply { leftMargin = dp(left); topMargin = dp(top); bottomMargin = dp(bottom) }
+        }
+
     private fun card(e: WatchEntry): View {
+        val w = dp(168); val h = dp(94)
         val frame = FrameLayout(this).apply {
-            plate(12)
+            background = rounded(Tok.surface2, dp(8).toFloat()); clipToOutline = true
+            isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+            // focus: white 3 dp ring and a 184x104 card (168x94 scaled by 1.095, neighbours keep their 16 dp gap)
+            foreground = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.TRANSPARENT); setStroke(dp(3), Tok.plate); cornerRadius = dp(8).toFloat()
+                })
+            }
             setOnClickListener { e.intentUri?.let(apps::launchUri) }
             contentDescription = e.title
-            setOnFocusChangeListener { _, f -> onCardFocus(e, f) }
+            setOnFocusChangeListener { v, f -> v.scaleX = if (f) 1.095f else 1f; v.scaleY = v.scaleX; onCardFocus(e, f) }
         }
-        val image = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setPadding(dp(3), dp(3), dp(3), dp(3)) }
+        val image = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         frame.addView(image, FrameLayout.LayoutParams(-1, -1))
-        (e.thumbUri?.takeIf { it.isNotBlank() } ?: e.posterUri?.takeIf { it.isNotBlank() })?.let { posters.load(it, dp(200), dp(112)) { bmp -> if (bmp != null) { image.scaleType = ImageView.ScaleType.MATRIX; image.imageMatrix = topCrop(bmp, dp(200) - dp(6), dp(112) - dp(6)); image.setImageBitmap(bmp) } } }
-
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(10), dp(24), dp(10), dp(8))
-            background = android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.TRANSPARENT, Color.argb(220, 10, 14, 18)),
-            )
+        (e.thumbUri?.takeIf { it.isNotBlank() } ?: e.posterUri?.takeIf { it.isNotBlank() })?.let {
+            posters.load(it, w, h) { bmp -> if (bmp != null) { image.scaleType = ImageView.ScaleType.MATRIX; image.imageMatrix = topCrop(bmp, w, h); image.setImageBitmap(bmp) } }
         }
-        val title = label(e.title, 14, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
-        box.addView(title)
-        EntryRules.remainingMinutes(e)?.let { box.addView(label(getString(R.string.minutes_left, it), 12, Tok.text72)) }
+        if (EntryRules.isNew(e)) frame.addView(chip(getString(R.string.badge_new), Tok.accentFill, Gravity.TOP or Gravity.START, 8, 8, 0))
+        EntryRules.episodeTag(e)?.let { t ->
+            val text = when {
+                t.movie -> getString(R.string.badge_movie)
+                t.season != null -> getString(R.string.badge_se, t.season, t.episode)
+                else -> getString(R.string.badge_e, t.episode)
+            }
+            frame.addView(chip(text, Color.argb(153, 0, 0, 0), Gravity.BOTTOM or Gravity.START, 8, 0, 10).apply { textSize = 12f })
+        }
         val pct = EntryRules.progressPct(e)
         if (pct > 0) {
-            val bar = FrameLayout(this).apply { background = rounded(Color.argb(60, 255, 255, 255), dp(2).toFloat()) }
-            bar.addView(View(this).apply { background = rounded(Tok.accentSoft, dp(2).toFloat()) },
-                FrameLayout.LayoutParams(maxOf(dp(4), dp(180) * pct / 100), -1))
-            box.addView(bar, lp(-1, dp(3)).apply { topMargin = dp(6) })
+            frame.addView(View(this).apply { setBackgroundColor(Tok.accentFill) },
+                FrameLayout.LayoutParams(maxOf(dp(4), w * pct / 100), dp(4), Gravity.BOTTOM or Gravity.START))
         }
-        frame.addView(box, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         return frame
     }
 
@@ -329,7 +326,7 @@ class HomeActivity : Activity() {
         col.addView(t1); col.addView(t2); col.addView(t3)
         row.addView(col)
         row.flipTexts(listOf(t1, t3), listOf(t2))
-        return row.also { it.layoutParams = lp(dp(560), dp(112)) }
+        return row.also { it.layoutParams = lp(dp(560), dp(104)) }
     }
 
     private fun installedPackage(p: String) = runCatching { packageManager.getPackageInfo(p, 0); true }.getOrDefault(false)
@@ -339,26 +336,54 @@ class HomeActivity : Activity() {
         startActivity(android.content.Intent(this, DockEditActivity::class.java).putExtra(DockEditActivity.EXTRA_INDEX, index))
 
     private fun showDock(installed: List<AppEntry>, recent: List<String>) {
-        dock.removeAllViews()
+        dock.removeAllViews(); dockLabels.clear()
+        dockItem(getString(R.string.search), null, android.R.drawable.ic_menu_search, -1, round = true) { apps.search() }
         // the editor works on the normalized slot list, so the index is the position among tokens, empty recent slots included
-        DockRules.slots(installed, packageName, Prefs.dock(this), recent).forEachIndexed { i, s ->
-            val a = s.app ?: return@forEachIndexed
-            dock.addView(dockTile(a.label, apps.icon(a.packageName), null, i) { apps.launch(a.packageName) }, lp(dp(56), dp(56)).apply { rightMargin = dp(10) })
+        DockRules.slots(installed, packageName, Prefs.dock(this), recent).forEachIndexed { i, sl ->
+            val a = sl.app ?: return@forEachIndexed
+            dockItem(a.label, apps.icon(a.packageName), null, i) { apps.launch(a.packageName) }
         }
-        dock.addView(dockTile(getString(R.string.all_apps), null, R.drawable.ic_all_apps, -1) {
-            startActivity(android.content.Intent(this, AllAppsActivity::class.java))
-        }, lp(dp(56), dp(56)))
+        dockItem(getString(R.string.all_apps), null, R.drawable.ic_all_apps, -1) { startActivity(android.content.Intent(this, AllAppsActivity::class.java)) }
+        val v = dockItem(getString(R.string.vpn), null, R.drawable.ic_vpn, -1, dot = true) { apps.vpnSettings() }
+        vpnButton = v; vpnDot = v.findViewWithTag("dot")
+        dockItem(getString(R.string.settings), null, R.drawable.ic_settings, -1) { startActivity(android.content.Intent(this, QuickSettingsActivity::class.java)) }
+        showVpn(VpnState.Off)
+        dockLabels.forEach { it.visibility = if (dockExpanded) View.VISIBLE else View.GONE }
     }
 
-    /** Compact icon-only favourite: no caption (it is in contentDescription), white plate on focus. */
-    private fun dockTile(name: String, icon: android.graphics.drawable.Drawable?, iconRes: Int?, index: Int, onClick: () -> Unit): View {
-        val box = FrameLayout(this).apply { plate(12); setOnClickListener { onClick() }; setOnLongClickListener { editDock(index); true }; contentDescription = name }
-        val img = ImageView(this).apply {
-            if (icon != null) setImageDrawable(icon) else if (iconRes != null) { setImageResource(iconRes); setColorFilter(Tok.text) }
+    /**
+     * One dock row: 44 dp icon (round for search) + caption shown only while the dock is expanded.
+     * Focus = translucent plate with a 2 dp white ring. Long OK on an app opens the dock editor.
+     */
+    private fun dockItem(name: String, icon: android.graphics.drawable.Drawable?, iconRes: Int?, index: Int, round: Boolean = false, dot: Boolean = false, onClick: () -> Unit): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            contentDescription = name
+            isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+            background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.argb(41, 255, 255, 255)); setStroke(dp(2), Tok.plate); cornerRadius = dp(if (round) 22 else 8).toFloat()
+                })
+            }
+            setOnClickListener { onClick() }
+            if (index >= 0) setOnLongClickListener { editDock(index); true }
         }
-        box.addView(img, FrameLayout.LayoutParams(dp(32), dp(32), Gravity.CENTER))
-        if (icon == null) box.setOnFocusChangeListener { _, f -> img.setColorFilter(if (f) Tok.onPlate else Tok.text) }
-        return box
+        val box = FrameLayout(this)
+        val img = ImageView(this)
+        if (icon != null) { img.setImageDrawable(icon); box.addView(img, FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER)) }
+        else {
+            box.background = rounded(Color.argb(31, 255, 255, 255), dp(if (round) 22 else 8).toFloat())
+            img.setImageResource(iconRes ?: 0); img.setColorFilter(Tok.text)
+            box.addView(img, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
+        }
+        if (dot) box.addView(View(this).apply { tag = "dot"; background = rounded(Tok.off, dp(4).toFloat()) },
+            FrameLayout.LayoutParams(dp(9), dp(9), Gravity.TOP or Gravity.END).apply { topMargin = dp(4); rightMargin = dp(4) })
+        row.addView(box, lp(dp(44), dp(44)))
+        val cap = label(name, 16, Tok.text, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(dp(12), 0, dp(8), 0); visibility = View.GONE }
+        row.addView(cap, lp(0, -2, 1f))
+        dockLabels += cap
+        dock.addView(row, lp(-1, dp(48)).apply { bottomMargin = dp(6) })
+        return row
     }
 
     private fun ensureFocus() {

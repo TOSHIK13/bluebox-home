@@ -12,7 +12,16 @@ data class WatchEntry(
     val lastEngagementMs: Long,
     val sourcePackage: String?,
     val thumbUri: String? = null,
+    val season: String? = null,
+    val episode: String? = null,
+    /** TvContract WATCH_NEXT_TYPE_*: 0 continue, 1 next, 2 new, 3 watchlist; -1 unknown. */
+    val watchNextType: Int = -1,
+    /** TvContract TYPE_*: 0 movie, 3 tv episode; -1 unknown. */
+    val contentType: Int = -1,
 )
+
+/** What the card badge says: "С2 · Е5", "Е5" or "Фильм". Numbers stay strings (providers may send "2A"). */
+data class EpisodeTag(val season: String?, val episode: String?, val movie: Boolean)
 
 /** Selection and wording rules for the rows; kept free of Android so they run as plain JVM unit tests. */
 object EntryRules {
@@ -22,6 +31,22 @@ object EntryRules {
 
     fun progressPct(e: WatchEntry): Int =
         if (e.durationMs <= 0 || e.positionMs <= 0) 0 else (e.positionMs * 100 / e.durationMs).toInt().coerceIn(0, 100)
+
+    const val TYPE_MOVIE = 0
+    const val WN_NEXT = 1
+    const val WN_NEW = 2
+
+    /** Badge for the card, or null when the provider gave neither an episode nor a movie type. */
+    fun episodeTag(e: WatchEntry): EpisodeTag? {
+        val season = e.season?.trim()?.takeIf { it.isNotEmpty() && it != "0" }
+        val episode = e.episode?.trim()?.takeIf { it.isNotEmpty() && it != "0" }
+        if (episode != null) return EpisodeTag(season, episode, movie = false)
+        return if (e.contentType == TYPE_MOVIE) EpisodeTag(null, null, movie = true) else null
+    }
+
+    /** A freshly released episode that has not been started: "НОВАЯ" until the first minute is watched. */
+    fun isNew(e: WatchEntry): Boolean =
+        (e.watchNextType == WN_NEW || e.watchNextType == WN_NEXT) && e.positionMs <= 0
 
     fun remainingMinutes(e: WatchEntry): Int? =
         if (e.durationMs <= 0 || e.positionMs <= 0) null else ((e.durationMs - e.positionMs).coerceAtLeast(0) / 60_000).toInt()

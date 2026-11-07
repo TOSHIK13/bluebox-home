@@ -27,6 +27,10 @@ class WatchNextSource(private val context: Context) {
             TvContract.WatchNextPrograms.COLUMN_LAST_ENGAGEMENT_TIME_UTC_MILLIS,
             TvContract.WatchNextPrograms.COLUMN_PACKAGE_NAME,
             TvContract.WatchNextPrograms.COLUMN_THUMBNAIL_URI,
+            TvContract.WatchNextPrograms.COLUMN_SEASON_DISPLAY_NUMBER,
+            TvContract.WatchNextPrograms.COLUMN_EPISODE_DISPLAY_NUMBER,
+            TvContract.WatchNextPrograms.COLUMN_WATCH_NEXT_TYPE,
+            TvContract.WatchNextPrograms.COLUMN_TYPE,
         )
         return try {
             context.contentResolver.query(TvContract.WatchNextPrograms.CONTENT_URI, cols, null, null, null).use { c ->
@@ -40,6 +44,8 @@ class WatchNextSource(private val context: Context) {
                         posterUri = c.getString(3), intentUri = c.getString(4),
                         positionMs = c.getLong(5), durationMs = c.getLong(6), lastEngagementMs = c.getLong(7),
                         sourcePackage = c.getString(8), thumbUri = c.getString(9),
+                        season = c.getString(10), episode = c.getString(11),
+                        watchNextType = if (c.isNull(12)) -1 else c.getInt(12), contentType = if (c.isNull(13)) -1 else c.getInt(13),
                     )
                 }
                 out
