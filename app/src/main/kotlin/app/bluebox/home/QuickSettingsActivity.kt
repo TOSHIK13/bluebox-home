@@ -15,6 +15,7 @@ import android.widget.TextView
 import app.bluebox.home.data.Apps
 import app.bluebox.home.data.NotificationFeed
 import app.bluebox.home.data.VpnMonitor
+import app.bluebox.home.logic.VpnRules
 import app.bluebox.home.logic.VpnState
 
 /**
@@ -26,8 +27,6 @@ class QuickSettingsActivity : Activity() {
     private lateinit var apps: Apps
     private lateinit var vpn: VpnMonitor
     private lateinit var notices: LinearLayout
-    private lateinit var vpnDot: View
-    private var vpnText: TextView? = null
     private var devText: TextView? = null
     private var lastVpn = VpnState.Off
 
@@ -75,7 +74,8 @@ class QuickSettingsActivity : Activity() {
         panel.addView(row1)
         panel.addView(space(0, 16))
 
-        // notifications of the system (VPN active, developer mode, ...) like the stock shade; fallback cards without access
+        // VPN card (state, uptime, traffic) stays in place; below it the system notifications like the stock shade
+        panel.addView(buildVpnCard(), lp(-1, -2).apply { bottomMargin = dp(12) })
         notices = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         panel.addView(notices)
 
@@ -84,8 +84,8 @@ class QuickSettingsActivity : Activity() {
         panel.findViewWithTag<View>("all")?.requestFocus()
     }
 
-    override fun onStart() { super.onStart(); vpn.start() }
-    override fun onStop() { vpn.stop(); NotificationFeed.changed = null; super.onStop() }
+    override fun onStart() { super.onStart(); vpn.start(); ticker.run() }
+    override fun onStop() { ticker.stop(); vpn.stop(); NotificationFeed.changed = null; super.onStop() }
 
     override fun onResume() {
         super.onResume()
@@ -93,42 +93,116 @@ class QuickSettingsActivity : Activity() {
         renderNotices()
     }
 
+    /** Re-reads uptime / traffic once a second while the panel is on screen. */
+    private val clock = android.os.Handler(android.os.Looper.getMainLooper())
+    private val ticker = object : Runnable {
+        override fun run() { showVpn(lastVpn); clock.postDelayed(this, 1000) }
+        fun stop() = clock.removeCallbacks(this)
+    }
+
+    private lateinit var vpnTitleDot: View
+    private lateinit var vpnState: TextView
+    private lateinit var vpnStats: LinearLayout
+    private lateinit var vpnTime: TextView
+    private lateinit var vpnRx: TextView
+    private lateinit var vpnTx: TextView
+
+    /** VPN card: dot + state on top; while connected, three figures (time, received, sent) underneath. */
+    private fun buildVpnCard(): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            plate(14); contentDescription = getString(R.string.vpn); setOnClickListener {
+                // the system VPN notification opens the stock dialog (app, session time, traffic); settings as fallback
+                val sent = NotificationFeed.vpn()?.open?.let { runCatching { it.send() }.isSuccess } ?: false
+                if (!sent) apps.vpnSettings()
+            }
+        }
+        val img = ImageView(this).apply { setImageResource(R.drawable.ic_vpn); setColorFilter(Tok.text) }
+        val title = label(getString(R.string.vpn), 14, bold = true)
+        vpnState = label("", 12, Tok.text72)
+        vpnTitleDot = View(this)
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        top.addView(img, lp(dp(24), dp(24)))
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), 0, 0, 0) }
+        col.addView(title); col.addView(space(0, 2)); col.addView(vpnState)
+        top.addView(col, lp(0, -2, 1f))
+        top.addView(vpnTitleDot, lp(dp(10), dp(10)))
+        card.addView(top)
+
+        vpnTime = label("–", 16, bold = true); vpnRx = label("–", 16, bold = true); vpnTx = label("–", 16, bold = true)
+        val caps = listOf(R.string.vpn_time, R.string.vpn_rx, R.string.vpn_tx).map { label(getString(it), 11, Tok.text72) }
+        vpnStats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; visibility = View.GONE }
+        listOf(vpnTime, vpnRx, vpnTx).forEachIndexed { i, v ->
+            val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            c.addView(caps[i]); c.addView(space(0, 2)); c.addView(v)
+            vpnStats.addView(c, lp(0, -2, 1f))
+        }
+        card.addView(vpnStats, lp(-1, -2).apply { topMargin = dp(12) })
+        card.setOnFocusChangeListener { _, f ->
+            val on = if (f) Tok.onPlate else Tok.text
+            val dim = if (f) Color.argb(160, 17, 17, 17) else Tok.text72
+            img.setColorFilter(on); title.setTextColor(on); listOf(vpnTime, vpnRx, vpnTx).forEach { it.setTextColor(on) }
+            vpnState.setTextColor(dim); caps.forEach { it.setTextColor(dim) }
+        }
+        return card
+    }
+
     private fun renderNotices() {
         notices.removeAllViews()
         if (NotificationFeed.hasAccess(this)) {
-            vpnText = null; devText = null
-            NotificationFeed.items.take(4).forEach { n ->
-                val sub = if (n.text.isNotEmpty()) label(n.text, 12, Tok.text72).apply { maxLines = 2 } else null
-                val card = wideRow(R.drawable.ic_bell, n.title.ifEmpty { n.text }, sub) {
+            devText = null
+            val hideAll = Prefs.hideOngoing(this)
+            val hidden = Prefs.hiddenNotices(this)
+            val shown = NotificationFeed.items
+                .filter { it.tag != "VpnStatusObserver" }
+                .filter { it.clearable || !(hideAll || it.key in hidden) }
+                .take(5)
+            shown.forEach { n ->
+                val sub = if (n.text.isNotEmpty() && n.title.isNotEmpty()) label(n.text, 12, Tok.text72).apply { maxLines = 2 } else null
+                // OK opens the notification and marks it read; long OK marks it read without opening
+                val card = wideRow(R.drawable.ic_bell, n.title.ifEmpty { n.text }, sub, apps.icon(n.pkg)) {
                     runCatching { n.open?.send() }
+                    if (n.clearable) NotificationFeed.dismiss(n.key)
+                }
+                // long OK: mark read; for a permanent one that cannot be cleared, hide it from this panel instead
+                card.setOnLongClickListener {
+                    if (n.clearable) NotificationFeed.dismiss(n.key) else { Prefs.hideNotice(this, n.key); renderNotices() }
+                    true
                 }
                 notices.addView(card, lp(-1, dp(if (sub != null) 64 else 52)).apply { bottomMargin = dp(12) })
             }
+            if (shown.any { it.clearable }) {
+                val hint = label(getString(R.string.notice_read_hint), 11, Tok.text56)
+                notices.addView(wideRow(R.drawable.ic_bell, getString(R.string.notice_read_all), hint) { NotificationFeed.dismissAll() }, lp(-1, dp(64)))
+            }
             return
         }
-        // no access: our own VPN / developer cards plus the request for access
-        val vt = label("", 12, Tok.text72); vpnText = vt
-        val vpnCard = wideRow(R.drawable.ic_vpn, getString(R.string.vpn), vt) { apps.vpnSettings() }
-        vpnDot = View(this)
-        vpnCard.addView(vpnDot, lp(dp(10), dp(10)))
-        notices.addView(vpnCard, lp(-1, dp(64)).apply { bottomMargin = dp(12) })
+        // no access: developer card plus the request for access
         val dt = label(getString(if (apps.developerEnabled()) R.string.developer_on else R.string.developer_off), 12, Tok.text72); devText = dt
         notices.addView(wideRow(R.drawable.ic_code, getString(R.string.developer), dt) { apps.developer() }, lp(-1, dp(64)).apply { bottomMargin = dp(12) })
         val hint = label(getString(R.string.notice_access_hint), 11, Tok.text56).apply { maxLines = 3 }
         notices.addView(wideRow(R.drawable.ic_bell, getString(R.string.notice_access), hint) { apps.notificationAccess() }, lp(-1, dp(76)))
-        showVpn(lastVpn)
     }
 
     private fun showVpn(s: VpnState) {
-        val vt = vpnText ?: return
+        if (!::vpnState.isInitialized) return
         val (color, textRes) = when (s) {
             VpnState.On -> Tok.ok to R.string.vpn_on
             VpnState.Off -> Tok.off to R.string.vpn_off
             VpnState.Connecting -> Tok.warn to R.string.vpn_connecting
             VpnState.Error -> Tok.error to R.string.vpn_error
         }
-        vpnDot.background = rounded(color, dp(5).toFloat())
-        vt.text = getString(textRes)
+        vpnTitleDot.background = rounded(color, dp(5).toFloat())
+        val vpnApp = if (s == VpnState.On) NotificationFeed.vpnApp() else null
+        vpnState.text = getString(textRes) + (vpnApp?.let { " · $it" } ?: "")
+        val info = if (s == VpnState.On) vpn.info() else null
+        vpnStats.visibility = if (info != null) View.VISIBLE else View.GONE
+        if (info != null) {
+            vpnTime.text = VpnRules.duration(info.upMs)
+            vpnRx.text = info.rx?.let(VpnRules::bytes) ?: "–"
+            vpnTx.text = info.tx?.let(VpnRules::bytes) ?: "–"
+        }
     }
 
     private fun tileLp(first: Boolean) = lp(0, dp(80), 1f).apply { if (first) rightMargin = dp(12) }
@@ -151,13 +225,14 @@ class QuickSettingsActivity : Activity() {
     }
 
     /** Wide row: icon, title (+ optional status line below it). The returned row accepts an extra trailing view. */
-    private fun wideRow(icon: Int, name: String, status: TextView?, onClick: () -> Unit): LinearLayout {
+    private fun wideRow(icon: Int, name: String, status: TextView?, appIcon: android.graphics.drawable.Drawable? = null, onClick: () -> Unit): LinearLayout {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), 0, dp(16), 0)
             plate(14); contentDescription = name; setOnClickListener { onClick() }
         }
-        val img = ImageView(this).apply { setImageResource(icon); setColorFilter(Tok.text) }
+        // an app's own icon keeps its colours; system glyphs are tinted
+        val img = ImageView(this).apply { if (appIcon != null) setImageDrawable(appIcon) else { setImageResource(icon); setColorFilter(Tok.text) } }
         row.addView(img, lp(dp(24), dp(24)))
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), 0, 0, 0) }
         val t = label(name, 14, bold = true)
@@ -165,7 +240,7 @@ class QuickSettingsActivity : Activity() {
         if (status != null) { col.addView(space(0, 2)); col.addView(status) }
         row.addView(col, lp(0, -2, 1f))
         row.setOnFocusChangeListener { _, f ->
-            img.setColorFilter(if (f) Tok.onPlate else Tok.text)
+            if (appIcon == null) img.setColorFilter(if (f) Tok.onPlate else Tok.text)
             t.setTextColor(if (f) Tok.onPlate else Tok.text)
             status?.setTextColor(if (f) Color.argb(160, 17, 17, 17) else Tok.text72)
         }

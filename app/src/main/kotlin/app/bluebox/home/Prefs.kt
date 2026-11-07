@@ -42,6 +42,50 @@ object Prefs {
         c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("asked_$step", true).apply()
     }
 
+    /** Ongoing notifications (VPN, downloads, …) in the quick panel: shown by default; all can be hidden or one by one. */
+    fun hideOngoing(c: Context): Boolean = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean("hide_ongoing", false)
+
+    fun setHideOngoing(c: Context, on: Boolean) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("hide_ongoing", on).apply()
+    }
+
+    fun hiddenNotices(c: Context): Set<String> =
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getStringSet("hidden_notices", emptySet()).orEmpty()
+
+    fun hideNotice(c: Context, key: String) {
+        val p = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        p.edit().putStringSet("hidden_notices", HashSet(hiddenNotices(c) + key)).apply()
+    }
+
+    fun clearHiddenNotices(c: Context) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().remove("hidden_notices").apply()
+    }
+
+    /** Channel rows: owner's order and switched-off channels, by [app.bluebox.home.logic.ChannelRules.key]. */
+    fun channelOrder(c: Context): List<String> =
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString("channel_order", null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
+
+    fun setChannelOrder(c: Context, keys: List<String>) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString("channel_order", keys.joinToString("\n")).apply()
+    }
+
+    fun hiddenChannels(c: Context): Set<String> =
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getStringSet("hidden_channels", emptySet()).orEmpty()
+
+    fun setChannelHidden(c: Context, key: String, hidden: Boolean) {
+        val next = HashSet(hiddenChannels(c)).also { if (hidden) it += key else it -= key }
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putStringSet("hidden_channels", next).apply()
+    }
+
+    /** Apps whose "continue watching" (Watch Next) rows are switched off on Home, by package. */
+    fun hiddenWatchApps(c: Context): Set<String> =
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getStringSet("hidden_watch_apps", emptySet()).orEmpty()
+
+    fun setWatchAppHidden(c: Context, pkg: String, hidden: Boolean) {
+        val next = HashSet(hiddenWatchApps(c)).also { if (hidden) it += pkg else it -= pkg }
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putStringSet("hidden_watch_apps", next).apply()
+    }
+
     fun setBackdrop(c: Context, on: Boolean) {
         c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean(BACKDROP, on).apply()
     }

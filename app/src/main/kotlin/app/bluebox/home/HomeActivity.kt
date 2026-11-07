@@ -1,5 +1,6 @@
 package app.bluebox.home
 
+import android.animation.ObjectAnimator
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
@@ -12,11 +13,14 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.graphics.drawable.StateListDrawable
+import android.widget.ScrollView
 import android.widget.TextClock
 import android.widget.TextView
 import app.bluebox.home.data.Apps
+import app.bluebox.home.logic.ChannelRow
+import app.bluebox.home.logic.ChannelRules
+import app.bluebox.home.data.ChannelSource
 import app.bluebox.home.data.NotificationFeed
 import app.bluebox.home.data.Posters
 import app.bluebox.home.data.VpnMonitor
@@ -33,6 +37,7 @@ import java.util.concurrent.Executors
 class HomeActivity : Activity() {
     private lateinit var apps: Apps
     private lateinit var watchNext: WatchNextSource
+    private lateinit var channelSource: ChannelSource
     private lateinit var posters: Posters
     private lateinit var vpn: VpnMonitor
     private val io = Executors.newSingleThreadExecutor()
@@ -53,6 +58,7 @@ class HomeActivity : Activity() {
         backdrops = Posters(this, cacheSize = 3)
         apps = Apps(this)
         watchNext = WatchNextSource(this)
+        channelSource = ChannelSource(this)
         posters = Posters(this)
         vpn = VpnMonitor(this, ::showVpn)
         setContentView(buildUi())
@@ -89,22 +95,29 @@ class HomeActivity : Activity() {
         runCatching {
             io.execute {
                 runCatching {
-                    val rows = EntryRules.select(watchNext.load(), System.currentTimeMillis())
+                    val rows = EntryRules.select(watchNext.load().filter { it.sourcePackage !in Prefs.hiddenWatchApps(this) }, System.currentTimeMillis())
+                    val channels = ChannelRules.visible(
+                        ChannelRules.arrange(channelSource.load().filter { debuggable || !it.packageName.startsWith("app.bluebox.home") }, Prefs.channelOrder(this)),
+                        Prefs.hiddenChannels(this),
+                    ).filter { it.entries.isNotEmpty() }
                     val installed = apps.installed()
                     val recent = apps.recent()
-                    runOnUiThread { if (!isDestroyed) refresh(rows, installed, recent) }
+                    runOnUiThread { if (!isDestroyed) refresh(rows, channels, installed, recent) }
                 }
             }
         }
     }
 
     /** Rebuilds cards and dock, then puts focus back on the same tile (matched by description). */
-    private fun refresh(rows: List<WatchEntry>, installed: List<AppEntry>, recent: List<String>) {
-        val keep = currentFocus?.takeIf { it.parent === dock || it.parent === cards }?.contentDescription?.toString()
-        showCards(rows); showDock(installed, recent)
-        val same = keep?.let { k -> (0 until cards.childCount).map { cards.getChildAt(it) }.plus((0 until dock.childCount).map { dock.getChildAt(it) }).firstOrNull { it.contentDescription?.toString() == k } }
+    private fun refresh(rows: List<WatchEntry>, channels: List<ChannelRow>, installed: List<AppEntry>, recent: List<String>) {
+        val keep = currentFocus?.takeIf { it.parent === dock || it.parent === dockBottom || blocks.any { b -> it.parent === b.cards } }?.contentDescription?.toString()
+        showCards(rows, channels); showDock(installed, recent)
+        if (editing) { focusEditRow(); return }
+        val same = keep?.let { k -> blocks.flatMap { b -> (0 until b.cards.childCount).map { b.cards.getChildAt(it) } }.plus(dockViews()).firstOrNull { it.contentDescription?.toString() == k } }
         if (same != null) same.requestFocus() else ensureFocus()
     }
+
+    private fun dockViews(): List<View> = (0 until dock.childCount).map { dock.getChildAt(it) } + (0 until dockBottom.childCount).map { dockBottom.getChildAt(it) }
 
     override fun onPause() { vpn.stop(); super.onPause() }
 
@@ -119,16 +132,18 @@ class HomeActivity : Activity() {
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
-        // Home pressed while already on Home: back to the first card.
+        // Home pressed while already on Home: leave editing, back to the first card.
+        if (editing) exitEdit()
         focusSet = false
         ensureFocus()
         cardsScroll.smoothScrollTo(0, 0)
+        if (blocks.isNotEmpty()) scrollToBlock(blocks[0])
     }
 
     // ---- UI (design A: dock on the left, backdrop full-bleed, title over a row of wide cards) ----
 
     private lateinit var dockPanel: FrameLayout
-    private lateinit var dockScroll: ScrollView
+    private lateinit var dockBottom: LinearLayout
     private lateinit var titleView: TextView
     private lateinit var content: View
     private val dockLabels = ArrayList<TextView>()
@@ -139,6 +154,18 @@ class HomeActivity : Activity() {
 
         backdrop = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; visibility = View.GONE }
         root.addView(backdrop, FrameLayout.LayoutParams(-1, -1))
+        // vertical posters take the right ~third of the screen, fading into the background on their left edge
+        posterSide = FrameLayout(this).apply {
+            visibility = View.GONE
+            addView(ImageView(context).apply { tag = "poster"; scaleType = ImageView.ScaleType.CENTER_CROP }, FrameLayout.LayoutParams(-1, -1))
+            addView(View(context).apply {
+                background = android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                    intArrayOf(Tok.surface, Color.argb(0, 21, 33, 42)),
+                )
+            }, FrameLayout.LayoutParams(dp(180), -1, Gravity.START))
+        }
+        root.addView(posterSide, FrameLayout.LayoutParams(dp(520), -1, Gravity.END))
         // static scrims: darker on the left (under the dock and the title), darker at the bottom (under the cards)
         backdropScrim = View(this).apply { visibility = View.GONE; setBackgroundColor(Color.argb(60, 21, 33, 42)) }
         root.addView(backdropScrim, FrameLayout.LayoutParams(-1, -1))
@@ -155,22 +182,25 @@ class HomeActivity : Activity() {
             )
         }, FrameLayout.LayoutParams(-1, dp(250), Gravity.BOTTOM))
 
-        // title block + cards, bottom-anchored, 104 dp from the left edge (72 dock + 32 gap)
-        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
-        column.addView(label(getString(R.string.continue_watching), 14, Tok.text72, bold = true), lp(-2, -2).apply { leftMargin = dp(16) })
-        titleView = label("", 42).apply {
-            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
-            setShadowLayer(dp(8).toFloat(), 0f, dp(1).toFloat(), Color.argb(130, 0, 0, 0))
+        // title block + cards, bottom-anchored. The column starts exactly at the collapsed dock's right edge (72 dp), so the row
+        // is clipped there and never slides under the dock; the 32 dp padding keeps the first card's ring inside the clip.
+        val main = makeBlock(getString(R.string.continue_watching), 42)
+        blocks += main
+        titleView = main.title; cards = main.cards; cardsScroll = main.scroll
+        // rows: "continue watching" first, then other apps' own channels below; the list scrolls vertically so the focused row sits at the top
+        extra = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        topSpacer = View(this)
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(topSpacer, lp(-1, 0)); addView(main.root); addView(extra); addView(View(context), lp(-1, dp(38)))
         }
-        column.addView(titleView, lp(-1, -2).apply { topMargin = dp(4); leftMargin = dp(16) })
-        cards = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; setPadding(dp(16), 0, dp(16), 0) }
-        cardsScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false; clipToPadding = false; clipChildren = false; isFillViewport = false
-            addView(cards)
-        }
-        column.addView(cardsScroll, lp(-1, dp(104)).apply { topMargin = dp(22) })
-        content = column
-        root.addView(column, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { leftMargin = dp(88); bottomMargin = dp(44) })
+        rowsScroll = object : ScrollView(this) {
+            // the shelves are placed by scrollToBlock; the default "scroll the focused card just into view" would undo it
+            override fun computeScrollDeltaToGetChildRectOnScreen(rect: android.graphics.Rect): Int = 0
+        }.apply { isVerticalScrollBarEnabled = false; addView(body) }
+        content = rowsScroll
+        rowsScroll.addOnLayoutChangeListener { _, _, t, _, b, _, ot, _, ob -> if (b - t != ob - ot && blocks.isNotEmpty()) rowsScroll.post { fitSpacer() } }
+        root.addView(rowsScroll, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { leftMargin = dp(72); bottomMargin = dp(38) })
 
         // clock top-right
         val time = TextClock(this).apply {
@@ -179,21 +209,28 @@ class HomeActivity : Activity() {
         }
         root.addView(time, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(28); rightMargin = dp(48) })
 
-        // dock on the left; grows to 240 dp with captions while focus is inside
-        dock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(20), dp(14), dp(20)) }
-        dockScroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(dock) }
-        dockPanel = FrameLayout(this).apply { setBackgroundColor(Color.argb(115, 10, 14, 18)); addView(dockScroll, FrameLayout.LayoutParams(-1, -1)) }
+        // dock on the left; grows to 240 dp with captions while focus is inside. No scrolling: as many apps as fit the screen
+        // from the top, "all apps / VPN / settings" glued to the bottom.
+        dock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        dockBottom = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val dockColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(20), dp(14), dp(20)) }
+        dockColumn.addView(dock, lp(-1, 0, 1f)); dockColumn.addView(dockBottom, lp(-1, -2))
+        dockPanel = FrameLayout(this).apply { setBackgroundColor(Color.argb(115, 10, 14, 18)); addView(dockColumn, FrameLayout.LayoutParams(-1, -1)) }
         root.addView(dockPanel, FrameLayout.LayoutParams(dp(72), -1))
-        root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now -> setDockExpanded(now != null && isInDock(now)) }
+        buildEditPopup(root)
+        root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now ->
+            setDockExpanded(now != null && (isIn(now, dockPanel) || isIn(now, editPopup)))
+            if (editing && !moving && !rebuilding) onEditFocus(now)
+        }
 
         vpnDot = View(this); vpnButton = View(this) // replaced when the dock is built
         showVpn(VpnState.Off)
         return root
     }
 
-    private fun isInDock(v: View): Boolean {
+    private fun isIn(v: View, ancestor: View): Boolean {
         var p: android.view.ViewParent? = v.parent
-        while (p != null) { if (p === dockPanel) return true; p = p.parent }
+        while (p != null) { if (p === ancestor) return true; p = p.parent }
         return false
     }
 
@@ -214,20 +251,29 @@ class HomeActivity : Activity() {
         if (!backdropOn()) hideBackdrop()
     }
 
-    private fun onCardFocus(e: WatchEntry, focused: Boolean) {
+    private fun anyCardFocused() = blocks.any { it.cards.focusedChild != null }
+
+    private fun onCardFocus(e: WatchEntry, b: Block, focused: Boolean) {
         backdropHandler.removeCallbacksAndMessages(null)
         if (!focused) {
             // focus left the card (to a neighbour card the next callback re-arms; to the dock we clear)
-            backdropHandler.postDelayed({ if (cards.focusedChild == null) hideBackdrop() }, BackdropRules.DELAY_MS)
+            backdropHandler.postDelayed({ if (!anyCardFocused()) hideBackdrop() }, BackdropRules.DELAY_MS)
             return
         }
-        titleView.text = e.title
+        b.title.text = e.title
         if (!backdropOn()) return
         val uri = BackdropRules.pick(e) ?: return
         backdropHandler.postDelayed({
             backdrops.load(uri, 960, 540) { bmp ->
-                if (bmp != null && cards.focusedChild != null && backdropOn()) {
-                    backdrop.setImageBitmap(bmp); backdrop.visibility = View.VISIBLE; backdropScrim.visibility = View.VISIBLE
+                if (bmp != null && anyCardFocused() && backdropOn()) {
+                    if (bmp.height > bmp.width * 1.1) {
+                        // vertical poster: shown whole on the right part of the screen, the rest stays the flat dark background
+                        backdrop.visibility = View.GONE; backdropScrim.visibility = View.GONE
+                        posterSide.findViewWithTag<ImageView>("poster").setImageBitmap(bmp); posterSide.visibility = View.VISIBLE
+                    } else {
+                        posterSide.visibility = View.GONE
+                        backdrop.setImageBitmap(bmp); backdrop.visibility = View.VISIBLE; backdropScrim.visibility = View.VISIBLE
+                    }
                 }
             }
         }, BackdropRules.DELAY_MS)
@@ -235,7 +281,10 @@ class HomeActivity : Activity() {
 
     private fun hideBackdrop() {
         backdrop.visibility = View.GONE; backdropScrim.visibility = View.GONE; backdrop.setImageDrawable(null)
+        posterSide.visibility = View.GONE; posterSide.findViewWithTag<ImageView>("poster").setImageDrawable(null)
     }
+
+    private lateinit var posterSide: FrameLayout
 
     private fun showVpn(s: VpnState) {
         val (color, textRes) = when (s) {
@@ -248,11 +297,154 @@ class HomeActivity : Activity() {
         vpnButton.contentDescription = getString(textRes)
     }
 
-    private fun showCards(rows: List<WatchEntry>) {
+    /** One shelf: small header, big title of the focused card, horizontal strip of cards. */
+    private class Block(val root: View, val title: TextView, val cards: LinearLayout, val scroll: HorizontalScrollView)
+
+    private lateinit var rowsScroll: ScrollView
+    private lateinit var extra: LinearLayout
+    private lateinit var topSpacer: View
+    private val blocks = ArrayList<Block>()
+
+    private fun makeBlock(header: String, titleSp: Int, stripH: Int = 116): Block {
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
+        col.addView(label(header, 14, Tok.text72, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END },
+            lp(-2, -2).apply { leftMargin = dp(32) })
+        val title = label("", titleSp).apply {
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            setShadowLayer(dp(8).toFloat(), 0f, dp(1).toFloat(), Color.argb(130, 0, 0, 0))
+        }
+        col.addView(title, lp(-1, -2).apply { topMargin = dp(4); leftMargin = dp(32) })
+        val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipToPadding = false; setPadding(dp(32), 0, dp(32), 0) }
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false; isFillViewport = false // clips at its own bounds = the dock's right edge
+            addView(strip)
+        }
+        // 116 dp: a focused card (94 dp x 1.095 plus the 3 dp ring) needs room above and below or the ring is cut
+        col.addView(scroll, lp(-1, dp(stripH)).apply { topMargin = dp(10) })
+        return Block(col, title, strip, scroll)
+    }
+
+    /** Height of the tallest shelf (kept for the layout of the first one). */
+    private var shelfH = 0
+    private val debuggable get() = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 // debug builds show their own seeded channels
+    private var lastFocused = 0
+    private var lastMoveAt = 0L
+    private val fades = ArrayList<android.animation.ObjectAnimator>() // alpha of a shelf coming from above is delayed: a plain animator, cancelled on the next move
+    private var lastTarget = 0
+
+    /** The real height of the scroll window (after layout), not the display's: the window may be shorter than the screen. */
+    private fun windowH() = rowsScroll.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+    private var anim = 0 // bumped on every jump: end actions of an older jump must not touch the shelves any more
+
+    /** The first shelf sits on the bottom line when not scrolled; shorter than the window by the spacer on top. */
+    private fun fitSpacer() {
+        val h = maxOf(0, windowH() - dp(38) - blocks[0].root.measuredHeight)
+        if (topSpacer.layoutParams.height != h) topSpacer.layoutParams = topSpacer.layoutParams.apply { height = h }
+    }
+    private fun bodyBottom(b: Block) = if (b === blocks[0]) b.root.bottom else extra.top + b.root.bottom
+
+    /**
+     * The focused shelf is bottom-anchored where the single row used to be. The shelf before it slides up off the screen and fades out
+     * (the centre stays clean); shelves further up are hidden; the next one only shows its header under the focused one.
+     */
+    private fun scrollToBlock(b: Block, animate: Boolean = true) {
+        val i = blocks.indexOf(b)
+        val k = lastFocused
+        val target = maxOf(0, bodyBottom(b) - (windowH() - dp(38)))
+        val shift = (target - lastTarget).toFloat() // where a shelf was before the jump, relative to where it is now
+        if (animate && i == k && target == lastTarget) return
+        lastFocused = i; lastTarget = target
+        val gen = ++anim
+        fades.forEach { it.cancel() }; fades.clear()
+        rowsScroll.scrollTo(0, target) // the jump is instant; every shelf is then animated from its old place by hand
+        val now = android.os.SystemClock.uptimeMillis()
+        val fast = now - lastMoveAt < 220 // key held or tapped quickly: shorter moves, so they do not pile up
+        lastMoveAt = now
+        val k1 = if (fast) 0.5f else 1f
+        val enter = android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f)
+        val leave = android.view.animation.PathInterpolator(0.3f, 0f, 1f, 1f)
+        val slide = dp(72).toFloat()
+        blocks.forEachIndexed { j, x ->
+            val v = x.root
+            v.animate().cancel()
+            v.animate().setStartDelay(0) // a delay set earlier would otherwise stick to the next run
+            val alpha = when { j == i -> 1f; j == i + 1 -> 0.5f; else -> 0f }
+            if (!animate) { v.alpha = alpha; v.translationY = 0f; return@forEachIndexed }
+            // the scroll jumped by `shift`: add it to where the shelf is now, so it carries on from the same place on screen
+            val from = v.translationY + shift
+            when {
+                j == i && k < i -> { // came up from below: rises to its place
+                    v.translationY = from
+                    v.animate().translationY(0f).alpha(1f).setDuration((280 * k1).toLong()).setInterpolator(enter).withLayer().start()
+                }
+                j == i -> { // came down from above: flies down to its place, shows itself only in the last part of the way
+                    v.translationY = from.coerceIn(-dp(300).toFloat(), dp(300).toFloat()); v.alpha = 0f
+                    v.animate().translationY(0f).setDuration((280 * k1).toLong()).setInterpolator(enter).withLayer().start()
+                    fades += ObjectAnimator.ofFloat(v, View.ALPHA, 0f, 1f).apply { startDelay = (110 * k1).toLong(); duration = (170 * k1).toLong(); start() }
+                }
+                j == k && k < i -> { // left upwards: leaves from its old place, gone before the middle
+                    v.translationY = from
+                    v.animate().translationY(from - slide).alpha(0f).setDuration((140 * k1).toLong()).setInterpolator(leave)
+                        .withEndAction { if (gen == anim) v.translationY = 0f }.withLayer().start()
+                }
+                j == k && j == i + 1 -> { // left downwards and is now the "next" header: settles to the bottom edge, no blinking
+                    v.translationY = from
+                    v.animate().translationY(0f).alpha(0.5f).setDuration((280 * k1).toLong()).setInterpolator(enter).withLayer().start()
+                }
+                j == k -> { // left downwards, further away
+                    v.translationY = from
+                    v.animate().translationY(from + slide).alpha(0f).setDuration((140 * k1).toLong()).setInterpolator(leave)
+                        .withEndAction { if (gen == anim) v.translationY = 0f }.withLayer().start()
+                }
+                j == i + 1 -> { // the next shelf shows only its header, a moment after the others
+                    v.translationY = 0f
+                    v.animate().alpha(0.5f).setStartDelay((120 * k1).toLong()).setDuration((160 * k1).toLong()).start()
+                }
+                else -> { v.alpha = 0f; v.translationY = 0f }
+            }
+        }
+    }
+
+    /** How much of the previous shelf stays visible above the focused one: just the bottom edge of its cards. */
+    private val PEEK_TOP get() = dp(34)
+
+    private fun appLabel(pkg: String): String =
+        runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+
+    private fun showCards(rows: List<WatchEntry>, channels: List<ChannelRow>) {
+        val main = blocks[0]
+        while (blocks.size > 1) blocks.removeAt(blocks.size - 1)
+        extra.removeAllViews()
         cards.removeAllViews()
-        if (rows.isEmpty()) { titleView.text = ""; cards.addView(emptyCard()); return }
-        rows.forEach { cards.addView(card(it), lp(dp(168), dp(94)).apply { rightMargin = dp(16); gravity = Gravity.CENTER_VERTICAL }) }
-        titleView.text = rows.first().title
+        if (rows.isEmpty()) { titleView.text = ""; cards.addView(emptyCard()) }
+        else {
+            rows.forEach { cards.addView(card(it, main), lp(dp(168), dp(94)).apply { rightMargin = dp(16); gravity = Gravity.CENTER_VERTICAL }) }
+            titleView.text = rows.first().title
+        }
+        channels.forEach { ch ->
+            val portrait = ch.portrait
+            val cw = if (portrait) 96 else 168; val chh = if (portrait) 144 else 94
+            val b = makeBlock("${ch.name.ifBlank { ch.packageName }} · ${appLabel(ch.packageName)}", 42, if (portrait) 168 else 116)
+            b.root.setPadding(0, dp(10), 0, 0)
+            ch.entries.forEach { b.cards.addView(card(it, b, cw, chh), lp(dp(cw), dp(chh)).apply { rightMargin = dp(16); gravity = Gravity.CENTER_VERTICAL }) }
+            b.title.text = ch.entries.first().title
+            blocks += b; extra.addView(b.root)
+        }
+        // the window is the tallest shelf + 38 dp; shorter shelves are pushed down by the top spacer so the first one stays where it was
+        val w = View.MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels - dp(72), View.MeasureSpec.EXACTLY)
+        val unspec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        blocks.forEach { it.root.measure(w, unspec) }
+        shelfH = blocks.maxOf { it.root.measuredHeight }
+        rowsScroll.layoutParams = (rowsScroll.layoutParams as FrameLayout.LayoutParams).apply { height = -1; bottomMargin = 0 }
+        fitSpacer()
+        // up from the first row and down from the last stay put (the dock is to the left, never above/below)
+        lockEdge(blocks.first(), up = true); lockEdge(blocks.last(), up = false)
+        rowsScroll.scrollTo(0, 0); lastFocused = 0; lastTarget = 0
+        blocks.forEachIndexed { j, x -> x.root.translationY = 0f; x.root.alpha = if (j <= 1) (if (j == 0) 1f else 0.5f) else 0f }
+    }
+
+    private fun lockEdge(b: Block, up: Boolean) {
+        for (i in 0 until b.cards.childCount) b.cards.getChildAt(i).let { if (up) it.nextFocusUpId = it.id else it.nextFocusDownId = it.id }
     }
 
     /**
@@ -274,11 +466,13 @@ class HomeActivity : Activity() {
             layoutParams = FrameLayout.LayoutParams(-2, dp(18), gravity).apply { leftMargin = dp(left); topMargin = dp(top); bottomMargin = dp(bottom) }
         }
 
-    private fun card(e: WatchEntry): View {
-        val w = dp(168); val h = dp(94)
+    private fun card(e: WatchEntry, b: Block, wDp: Int = 168, hDp: Int = 94): View {
+        val w = dp(wDp); val h = dp(hDp)
         val frame = FrameLayout(this).apply {
             background = rounded(Tok.surface2, dp(8).toFloat()); clipToOutline = true
             isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+            // the first row's up and the last row's down are pinned in lockEdge; between rows the system picks the card below/above
+            id = View.generateViewId()
             // focus: white 3 dp ring and a 184x104 card (168x94 scaled by 1.095, neighbours keep their 16 dp gap)
             foreground = StateListDrawable().apply {
                 addState(intArrayOf(android.R.attr.state_focused), android.graphics.drawable.GradientDrawable().apply {
@@ -287,7 +481,14 @@ class HomeActivity : Activity() {
             }
             setOnClickListener { e.intentUri?.let(apps::launchUri) }
             contentDescription = e.title
-            setOnFocusChangeListener { v, f -> v.scaleX = if (f) 1.095f else 1f; v.scaleY = v.scaleX; onCardFocus(e, f) }
+            setOnFocusChangeListener { v, f ->
+                v.scaleX = if (f) 1.095f else 1f; v.scaleY = v.scaleX; onCardFocus(e, b, f)
+                // the focused card sits 32 dp from the clip edge: its ring is never cut and nothing slides under the dock
+                if (f) {
+                    b.scroll.smoothScrollTo(maxOf(0, v.left - b.cards.paddingLeft), 0)
+                    scrollToBlock(b)
+                }
+            }
         }
         val image = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         frame.addView(image, FrameLayout.LayoutParams(-1, -1))
@@ -331,42 +532,210 @@ class HomeActivity : Activity() {
 
     private fun installedPackage(p: String) = runCatching { packageManager.getPackageInfo(p, 0); true }.getOrDefault(false)
 
-    /** Long OK on any dock tile opens the dock editor (move / remove / add). */
-    private fun editDock(index: Int) =
-        startActivity(android.content.Intent(this, DockEditActivity::class.java).putExtra(DockEditActivity.EXTRA_INDEX, index))
+    // ---- dock editing in place: long OK on an app → actions «Переместить» / «Скрыть» appear to the right of that app ----
+
+    private var installedNow: List<AppEntry> = emptyList()
+    private var recentNow: List<String> = emptyList()
+    private var tokens: List<String> = emptyList()
+    private var visibleTokens: List<Int> = emptyList()
+    private var rebuilding = false // rows are being recreated: focus the system hands out meanwhile is not the user's
+    private var editing = false
+    private var moving = false
+    private var editToken = -1
+    private lateinit var editPopup: FrameLayout
+    private lateinit var editChips: LinearLayout
+    private lateinit var editHint: TextView
+    private lateinit var chipMove: View
+    private lateinit var chipHide: View
+
+    private fun buildEditPopup(root: FrameLayout) {
+        editChips = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun chip(text: String, onClick: () -> Unit): View {
+            val t = label(text, 14, bold = true)
+            return centered(t, dp(170), dp(44)).apply { plate(10, Tok.surface2); elevation = dp(4).toFloat(); id = View.generateViewId(); setOnClickListener { onClick() }; flipTexts(listOf(t)) }
+        }
+        chipMove = chip(getString(R.string.dock_move)) { moving = true; showEditUi() }
+        chipHide = chip(getString(R.string.dock_hide)) { hideEdited() }
+        chipMove.nextFocusUpId = chipMove.id; chipMove.nextFocusDownId = chipHide.id; chipMove.nextFocusRightId = chipMove.id
+        chipHide.nextFocusUpId = chipMove.id; chipHide.nextFocusDownId = chipHide.id; chipHide.nextFocusRightId = chipHide.id
+        editChips.addView(chipMove, lp(dp(170), dp(44)).apply { bottomMargin = dp(6) })
+        editChips.addView(chipHide, lp(dp(170), dp(44)))
+        editHint = label(getString(R.string.dock_moving), 13, Tok.text).apply {
+            setPadding(dp(12), dp(8), dp(12), dp(8)); background = rounded(Tok.surface2, dp(8).toFloat()); visibility = View.GONE
+        }
+        editPopup = FrameLayout(this).apply { visibility = View.GONE }
+        editPopup.addView(editChips); editPopup.addView(editHint, FrameLayout.LayoutParams(-2, -2))
+        root.addView(editPopup, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
+    }
+
+    private fun enterEdit(token: Int) {
+        editing = true; moving = false; editToken = token
+        // arranging by hand: the "recent" slots become the apps shown now, otherwise moving swaps identical slots and nothing moves
+        val pinned = DockRules.slots(installedNow, packageName, DockRules.normalize(installedNow, packageName, Prefs.dock(this)), recentNow)
+            .mapNotNull { it.app?.packageName }
+        if (pinned.isNotEmpty()) save(pinned)
+        rowsScroll.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS // no way to the cards while editing
+        rowsScroll.isFocusable = false
+        showDock(installedNow, recentNow)
+        focusEditRow()
+    }
+
+    private fun exitEdit() {
+        editing = false; moving = false
+        editPopup.visibility = View.GONE
+        rowsScroll.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        rowsScroll.isFocusable = true
+        showDock(installedNow, recentNow)
+        // focus back on the edited app, or on the first card when it is gone
+        (dock.findViewWithTag<View>("app$editToken") ?: cards.getChildAt(0) ?: dock.getChildAt(0))?.requestFocus()
+    }
+
+    /** Focus the edited app's row (or "+" when it is gone) and put the actions next to it. */
+    private fun focusEditRow() {
+        val row = dock.findViewWithTag<View>("app$editToken")
+        if (row == null) { editToken = -1; dock.findViewWithTag<View>("add")?.requestFocus() ?: dock.getChildAt(0)?.requestFocus() }
+        else row.requestFocus()
+        showEditUi()
+    }
+
+    /** Focus moved while editing: actions follow the focused app, hidden for any other row. */
+    private fun onEditFocus(now: View?) {
+        if (now == null || isIn(now, editPopup)) return
+        val tag = now.tag as? String
+        editToken = if (tag != null && tag.startsWith("app")) tag.removePrefix("app").toIntOrNull() ?: -1 else -1
+        showEditUi()
+    }
+
+    private fun showEditUi() {
+        val row = dock.findViewWithTag<View>("app$editToken")
+        if (!editing || row == null) { editPopup.visibility = View.GONE; return }
+        row.nextFocusRightId = chipMove.id
+        chipMove.nextFocusLeftId = row.id; chipHide.nextFocusLeftId = row.id
+        editChips.visibility = if (moving) View.GONE else View.VISIBLE
+        editHint.visibility = if (moving) View.VISIBLE else View.GONE
+        editPopup.visibility = View.VISIBLE
+        row.post {
+            val r = IntArray(2); val p = IntArray(2)
+            row.getLocationOnScreen(r); (editPopup.parent as View).getLocationOnScreen(p)
+            editPopup.layoutParams = (editPopup.layoutParams as FrameLayout.LayoutParams).apply {
+                leftMargin = dp(240 + 8); topMargin = r[1] - p[1]
+            }
+        }
+    }
+
+    private fun save(next: List<String>) { tokens = next; Prefs.setDock(this, next) }
+
+    /** Moves the edited app to the next visible app up (-1) or down (+1); every step is saved at once. */
+    private fun step(delta: Int) {
+        val pos = visibleTokens.indexOf(editToken)
+        val target = visibleTokens.getOrNull(pos + delta) ?: return
+        var t = tokens; var i = editToken
+        while (i != target) { t = DockRules.move(t, i, delta); i += delta }
+        save(t); editToken = target
+        showDock(installedNow, recentNow)
+        dock.findViewWithTag<View>("app$editToken")?.requestFocus()
+        showEditUi()
+    }
+
+    private fun hideEdited() {
+        val gone = editToken
+        save(DockRules.removeAt(tokens, gone))
+        editToken = gone // the next app slides into this place; focusEditRow falls back to "+" when none does
+        showDock(installedNow, recentNow)
+        focusEditRow()
+    }
+
+    override fun dispatchKeyEvent(e: KeyEvent): Boolean {
+        if (!editing) return super.dispatchKeyEvent(e)
+        val down = e.action == KeyEvent.ACTION_DOWN
+        if (moving) {
+            if (down) when (e.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> step(-1)
+                KeyEvent.KEYCODE_DPAD_DOWN -> step(+1)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BACK -> { moving = false; showEditUi() }
+            }
+            return true // swallow the rest: nothing may leave the row, key-up of OK must not click
+        }
+        if (e.keyCode == KeyEvent.KEYCODE_BACK) { if (down) exitEdit(); return true }
+        return super.dispatchKeyEvent(e)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        if (requestCode == PICK && resultCode == RESULT_OK) {
+            data?.getStringExtra(AllAppsActivity.EXTRA_PACKAGE)?.let { pkg ->
+                save(DockRules.add(tokens, pkg)); editToken = tokens.indexOf(pkg)
+            }
+        } else super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    /** Rows that fit between the top padding and the three bottom buttons (search takes one); no scrolling in the dock. */
+    private fun maxApps(): Int {
+        val hDp = resources.displayMetrics.heightPixels / resources.displayMetrics.density
+        return ((hDp - 40 - 54 * 4) / 54).toInt().coerceAtLeast(1)
+    }
+
+    /** Leaves the dock before a button opens another screen, so the dock is collapsed when Home comes back. */
+    private fun leaveDock() {
+        setDockExpanded(false)
+        cards.getChildAt(0)?.requestFocus()
+    }
 
     private fun showDock(installed: List<AppEntry>, recent: List<String>) {
-        dock.removeAllViews(); dockLabels.clear()
+        installedNow = installed; recentNow = recent
+        rebuilding = true
+        dock.removeAllViews(); dockBottom.removeAllViews(); dockLabels.clear()
+        // search stays on top while editing too; "+" at the end of the list takes one app row's room
         dockItem(getString(R.string.search), null, android.R.drawable.ic_menu_search, -1, round = true) { apps.search() }
-        // the editor works on the normalized slot list, so the index is the position among tokens, empty recent slots included
-        DockRules.slots(installed, packageName, Prefs.dock(this), recent).forEachIndexed { i, sl ->
+        // indexes are positions among the normalized tokens, so the editor and the saved list agree (empty recent slots included)
+        tokens = DockRules.normalize(installed, packageName, Prefs.dock(this))
+        val room = maxApps() - (if (editing && tokens.size < DockRules.MAX_SLOTS) 1 else 0)
+        val shown = ArrayList<Int>()
+        DockRules.slots(installed, packageName, tokens, recent).forEachIndexed { i, sl ->
             val a = sl.app ?: return@forEachIndexed
-            dockItem(a.label, apps.icon(a.packageName), null, i) { apps.launch(a.packageName) }
+            if (shown.size >= room) return@forEachIndexed
+            shown += i
+            dockItem(a.label, apps.icon(a.packageName), null, i) { apps.launch(a.packageName) }.tag = "app$i"
         }
-        dockItem(getString(R.string.all_apps), null, R.drawable.ic_all_apps, -1) { startActivity(android.content.Intent(this, AllAppsActivity::class.java)) }
-        val v = dockItem(getString(R.string.vpn), null, R.drawable.ic_vpn, -1, dot = true) { apps.vpnSettings() }
+        visibleTokens = shown
+        if (editing && tokens.size < DockRules.MAX_SLOTS) {
+            dockItem(getString(R.string.dock_add), null, R.drawable.ic_add, -1) {
+                startActivityForResult(android.content.Intent(this, AllAppsActivity::class.java).putExtra(AllAppsActivity.EXTRA_PICK, true), PICK)
+            }.tag = "add"
+        }
+        dockItem(getString(R.string.all_apps), null, R.drawable.ic_all_apps, -1, into = dockBottom) { startActivity(android.content.Intent(this, AllAppsActivity::class.java)) }
+        val v = dockItem(getString(R.string.vpn), null, R.drawable.ic_vpn, -1, dot = true, into = dockBottom) { apps.vpnSettings() }
         vpnButton = v; vpnDot = v.findViewWithTag("dot")
-        dockItem(getString(R.string.settings), null, R.drawable.ic_settings, -1) { startActivity(android.content.Intent(this, QuickSettingsActivity::class.java)) }
+        dockItem(getString(R.string.settings), null, R.drawable.ic_settings, -1, into = dockBottom) { startActivity(android.content.Intent(this, QuickSettingsActivity::class.java)) }
         showVpn(VpnState.Off)
         dockLabels.forEach { it.visibility = if (dockExpanded) View.VISIBLE else View.GONE }
+        rebuilding = false
     }
 
     /**
      * One dock row: 44 dp icon (round for search) + caption shown only while the dock is expanded.
-     * Focus = translucent plate with a 2 dp white ring. Long OK on an app opens the dock editor.
+     * Focus = translucent plate with a 2 dp white ring. Long OK on an app starts editing the dock.
      */
-    private fun dockItem(name: String, icon: android.graphics.drawable.Drawable?, iconRes: Int?, index: Int, round: Boolean = false, dot: Boolean = false, onClick: () -> Unit): View {
+    private fun dockItem(name: String, icon: android.graphics.drawable.Drawable?, iconRes: Int?, index: Int, round: Boolean = false, dot: Boolean = false, into: LinearLayout = dock, onClick: () -> Unit): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             contentDescription = name
+            id = View.generateViewId()
             isFocusable = true; isFocusableInTouchMode = false; isClickable = true
             background = StateListDrawable().apply {
                 addState(intArrayOf(android.R.attr.state_focused), android.graphics.drawable.GradientDrawable().apply {
                     setColor(Color.argb(41, 255, 255, 255)); setStroke(dp(2), Tok.plate); cornerRadius = dp(if (round) 22 else 8).toFloat()
                 })
             }
-            setOnClickListener { onClick() }
-            if (index >= 0) setOnLongClickListener { editDock(index); true }
+            setOnClickListener {
+                when {
+                    editing && index >= 0 -> if (!moving) chipMove.requestFocus() // OK on the app moves focus to its actions
+                    editing && tag == "add" -> onClick()
+                    editing -> { exitEdit(); onClick() }
+                    else -> { leaveDock(); onClick() }
+                }
+            }
+            if (index >= 0) setOnLongClickListener { if (!editing) enterEdit(index); true }
         }
         val box = FrameLayout(this)
         val img = ImageView(this)
@@ -382,7 +751,7 @@ class HomeActivity : Activity() {
         val cap = label(name, 16, Tok.text, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(dp(12), 0, dp(8), 0); visibility = View.GONE }
         row.addView(cap, lp(0, -2, 1f))
         dockLabels += cap
-        dock.addView(row, lp(-1, dp(48)).apply { bottomMargin = dp(6) })
+        into.addView(row, lp(-1, dp(48)).apply { bottomMargin = dp(6) })
         return row
     }
 
@@ -393,6 +762,7 @@ class HomeActivity : Activity() {
     }
 
     private companion object {
+        const val PICK = 1
         val BLUEBOX_PACKAGE_FALLBACKS = DockRules.DEFAULT_PINNED.take(3)
     }
 }

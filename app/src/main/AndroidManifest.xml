@@ -47,16 +47,16 @@
             android:exported="false"
             android:screenOrientation="landscape" />
         <activity
-            android:name=".DockEditActivity"
-            android:exported="false"
-            android:screenOrientation="landscape" />
-        <activity
             android:name=".QuickSettingsActivity"
             android:exported="false"
             android:theme="@style/Theme.BlueBoxHome.Panel"
             android:screenOrientation="landscape" />
         <activity
             android:name=".SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".ChannelsActivity"
             android:exported="false"
             android:screenOrientation="landscape" />
         <service

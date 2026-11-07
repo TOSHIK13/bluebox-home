@@ -10,6 +10,10 @@ import android.os.Looper
 import android.os.SystemClock
 import app.bluebox.home.logic.VpnRules
 import app.bluebox.home.logic.VpnState
+import java.io.File
+
+/** Session facts for the VPN card: how long Home has seen the tunnel up and what went through it (null = unreadable). */
+data class VpnInfo(val upMs: Long, val rx: Long?, val tx: Long?)
 
 /** Watches VPN networks and reports a [VpnState]; callbacks arrive on the main thread. */
 class VpnMonitor(context: Context, private val onState: (VpnState) -> Unit) {
@@ -21,8 +25,12 @@ class VpnMonitor(context: Context, private val onState: (VpnState) -> Unit) {
     private val recheck = Runnable { publish() }
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onCapabilitiesChanged(network: Network, nc: NetworkCapabilities) { caps[network] = nc; publish() }
-        override fun onLost(network: Network) { caps.remove(network); publish() }
+        override fun onCapabilitiesChanged(network: Network, nc: NetworkCapabilities) {
+            caps[network] = nc
+            firstSeen.getOrPut(network.networkHandle) { SystemClock.elapsedRealtime() }
+            publish()
+        }
+        override fun onLost(network: Network) { caps.remove(network); firstSeen.remove(network.networkHandle); publish() }
     }
 
     fun start() {
@@ -45,6 +53,24 @@ class VpnMonitor(context: Context, private val onState: (VpnState) -> Unit) {
         caps.clear()
     }
 
+    /**
+     * Uptime and tunnel traffic of the current VPN, or null without one. Uptime counts from the moment this process first
+     * saw the tunnel (Android does not expose the real start); counters come from the tunnel interface, so they are per tunnel.
+     */
+    fun info(): VpnInfo? {
+        val net = caps.keys.firstOrNull() ?: return null
+        val since = firstSeen[net.networkHandle] ?: return null
+        val iface = runCatching { cm.getLinkProperties(net)?.interfaceName }.getOrNull()
+        return VpnInfo(SystemClock.elapsedRealtime() - since, iface?.let { counter(it, "rx_bytes") }, iface?.let { counter(it, "tx_bytes") })
+    }
+
+    /** sysfs first; TrafficStats as the fallback where sysfs is hidden (the TV box). */
+    private fun counter(iface: String, name: String): Long? =
+        runCatching { File("/sys/class/net/$iface/statistics/$name").readText().trim().toLong() }.getOrNull()
+            ?: runCatching {
+                if (name == "rx_bytes") android.net.TrafficStats.getRxBytes(iface) else android.net.TrafficStats.getTxBytes(iface)
+            }.getOrNull()?.takeIf { it >= 0 }
+
     private fun publish() {
         main.removeCallbacks(recheck)
         val vpn = caps.values.firstOrNull()
@@ -54,5 +80,10 @@ class VpnMonitor(context: Context, private val onState: (VpnState) -> Unit) {
         val state = VpnRules.stateOf(vpn != null, validated, waited)
         onState(state)
         if (state == VpnState.Connecting) main.postDelayed(recheck, VpnRules.CONNECT_GRACE_MS - waited + 50)
+    }
+
+    private companion object {
+        /** Process-wide, so the panel opened later still knows when Home first saw the tunnel. */
+        val firstSeen = HashMap<Long, Long>()
     }
 }

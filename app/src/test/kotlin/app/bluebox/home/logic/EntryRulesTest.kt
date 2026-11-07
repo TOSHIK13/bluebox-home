@@ -53,6 +53,8 @@ class EntryRulesTest {
         assertEquals(EpisodeTag(null, "7", false), EntryRules.episodeTag(e(1).copy(season = "0", episode = "7")))
         assertEquals(EpisodeTag(null, null, true), EntryRules.episodeTag(e(1).copy(contentType = EntryRules.TYPE_MOVIE)))
         assertNull(EntryRules.episodeTag(e(1)))
+        // next/new episode of a series with a default "movie" type: no badge
+        assertNull(EntryRules.episodeTag(e(1).copy(contentType = EntryRules.TYPE_MOVIE, watchNextType = EntryRules.WN_NEXT)))
     }
 
     @Test fun `new episode is flagged until started`() {

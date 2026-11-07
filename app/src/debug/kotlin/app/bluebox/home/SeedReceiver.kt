@@ -43,7 +43,34 @@ class SeedReceiver : BroadcastReceiver() {
             if (runCatching { cr.insert(WatchNextPrograms.CONTENT_URI, v) }.onFailure { Log.w("BBHome", "seed failed", it) }.getOrNull() != null) ok++
         }
         Log.i("BBHome", "seed inserted=$ok of ${titles.size}")
+        seedChannels(context, intent.getIntExtra("channels", 4))
     }
+}
+
+/** Own preview channels with a few programs each (extra "channels" = how many, 0 = none): rows to test scrolling between shelves. */
+private fun seedChannels(context: Context, n: Int) {
+    val cr = context.contentResolver
+    runCatching { cr.delete(TvContract.Channels.CONTENT_URI, null, null) }
+    for (c in 1..n) {
+        val cv = ContentValues().apply {
+            put(TvContract.Channels.COLUMN_TYPE, TvContract.Channels.TYPE_PREVIEW)
+            put(TvContract.Channels.COLUMN_DISPLAY_NAME, "Тестовый ряд $c")
+            put(TvContract.Channels.COLUMN_APP_LINK_INTENT_URI, "bluebox://seed/channel/$c")
+        }
+        val uri = runCatching { cr.insert(TvContract.Channels.CONTENT_URI, cv) }.onFailure { Log.w("BBHome", "seed channel failed", it) }.getOrNull() ?: continue
+        val id = android.content.ContentUris.parseId(uri)
+        for (p in 1..8) {
+            val pv = ContentValues().apply {
+                put(TvContract.PreviewPrograms.COLUMN_CHANNEL_ID, id)
+                put(TvContract.PreviewPrograms.COLUMN_TYPE, TvContract.PreviewPrograms.TYPE_CLIP)
+                put(TvContract.PreviewPrograms.COLUMN_TITLE, "Ряд $c · видео $p")
+                put(TvContract.PreviewPrograms.COLUMN_INTENT_URI, "bluebox://seed/$c/$p")
+                put(TvContract.PreviewPrograms.COLUMN_WEIGHT, 100 - p)
+            }
+            runCatching { cr.insert(TvContract.PreviewPrograms.CONTENT_URI, pv) }.onFailure { Log.w("BBHome", "seed program failed", it) }
+        }
+    }
+    Log.i("BBHome", "seed channels=$n")
 }
 
 private data class Seed(val title: String, val pct: Int, val season: Int, val episode: Int, val fresh: Boolean = false)

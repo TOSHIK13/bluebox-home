@@ -27,7 +27,7 @@ data class EpisodeTag(val season: String?, val episode: String?, val movie: Bool
 object EntryRules {
     const val MAX_AGE_MS = 180L * 24 * 60 * 60 * 1000 // rows older than ~six months are stale
     const val HIDE_AT_PCT = 97 // provider rows linger after the end: do not offer "continue" at 99%
-    const val DEFAULT_LIMIT = 8
+    const val DEFAULT_LIMIT = 24 // 8 cut off apps whose rows have no "last watched" time (they sort last)
 
     fun progressPct(e: WatchEntry): Int =
         if (e.durationMs <= 0 || e.positionMs <= 0) 0 else (e.positionMs * 100 / e.durationMs).toInt().coerceIn(0, 100)
@@ -41,7 +41,9 @@ object EntryRules {
         val season = e.season?.trim()?.takeIf { it.isNotEmpty() && it != "0" }
         val episode = e.episode?.trim()?.takeIf { it.isNotEmpty() && it != "0" }
         if (episode != null) return EpisodeTag(season, episode, movie = false)
-        return if (e.contentType == TYPE_MOVIE) EpisodeTag(null, null, movie = true) else null
+        // "next"/"new" in Watch Next means the next episode of a series: a movie type there is the provider's default, not a fact
+        val series = e.watchNextType == WN_NEXT || e.watchNextType == WN_NEW
+        return if (e.contentType == TYPE_MOVIE && !series) EpisodeTag(null, null, movie = true) else null
     }
 
     /** A freshly released episode that has not been started: "НОВАЯ" until the first minute is watched. */
