@@ -32,7 +32,8 @@ class VpnMonitor(context: Context, private val onState: (VpnState) -> Unit) {
             .addTransportType(NetworkCapabilities.TRANSPORT_VPN)
             .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
             .build()
-        cm.registerNetworkCallback(req, callback)
+        // the handler keeps callbacks on the main thread: they touch views
+        runCatching { cm.registerNetworkCallback(req, callback, main) }
         publish()
     }
 

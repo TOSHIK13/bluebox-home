@@ -7,5 +7,10 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowFullscreen">true</item>
     </style>
+    <style name="Theme.BlueBoxHome.Panel" parent="Theme.BlueBoxHome">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+    </style>
     <color name="bg">#0f161b</color>
 </resources>

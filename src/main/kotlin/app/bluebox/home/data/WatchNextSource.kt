@@ -2,6 +2,7 @@ package app.bluebox.home.data
 
 import android.content.Context
 import android.media.tv.TvContract
+import android.net.Uri
 import android.util.Log
 import app.bluebox.home.logic.WatchEntry
 
@@ -31,6 +32,9 @@ class WatchNextSource(private val context: Context) {
             context.contentResolver.query(TvContract.WatchNextPrograms.CONTENT_URI, cols, null, null, null).use { c ->
                 val out = ArrayList<WatchEntry>()
                 if (c != null) while (c.moveToNext()) {
+                    // diagnostics: which picture fields each app fills (host only, no full URLs)
+                    Log.i(TAG, "row pkg=${c.getString(8)} title=${c.getString(1)} poster=${c.getString(3)?.let { Uri.parse(it).let { u -> u.scheme + "://" + u.host } }} " +
+                        "thumb=${c.getString(9)?.let { Uri.parse(it).let { u -> u.scheme + "://" + u.host } }}")
                     out += WatchEntry(
                         id = c.getLong(0), title = c.getString(1).orEmpty(), subtitle = c.getString(2),
                         posterUri = c.getString(3), intentUri = c.getString(4),

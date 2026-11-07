@@ -7,8 +7,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- a launcher has to list every installed app; the APK is not distributed through Play -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- card pictures of other apps' Watch Next rows are usually https URLs on their CDN -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Watch Next rows of other apps; granted only to privileged apps, see docs/plans/launcher.md "Риск данных" -->
     <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
+
+    <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
 
     <application
         android:allowBackup="false"
@@ -42,5 +46,27 @@
             android:name=".AllAppsActivity"
             android:exported="false"
             android:screenOrientation="landscape" />
+        <activity
+            android:name=".DockEditActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".QuickSettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BlueBoxHome.Panel"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <service
+            android:name=".data.NotificationFeed"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

@@ -20,7 +20,10 @@ class Posters(private val context: Context, cacheSize: Int = 24) {
     fun load(uri: String, reqW: Int, reqH: Int, done: (Bitmap?) -> Unit) {
         cache.get(uri)?.let { done(it); return }
         pool.execute {
-            val bmp = runCatching { decode(uri, reqW, reqH) }.getOrNull()
+            val bmp = runCatching { decode(uri, reqW, reqH) }
+                .onFailure { android.util.Log.w("BBHome", "image failed ${Uri.parse(uri).scheme}://${Uri.parse(uri).host}: ${it.javaClass.simpleName} ${it.message}") }
+                .getOrNull()
+            if (bmp == null) android.util.Log.w("BBHome", "image null ${Uri.parse(uri).scheme}://${Uri.parse(uri).host}")
             if (bmp != null) cache.put(uri, bmp)
             main.post { done(bmp) }
         }

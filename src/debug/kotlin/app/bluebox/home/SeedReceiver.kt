@@ -11,6 +11,13 @@ import android.util.Log
 /** Debug seed: writes OWN Watch Next rows so the home screen can be smoke-tested on an emulator. */
 class SeedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // scenarios must not be interrupted by the first-run permission chain (see m6-home-permissions.txt for that)
+        if (intent.getBooleanExtra("reset_asked", false)) {
+            context.getSharedPreferences("home", Context.MODE_PRIVATE).edit()
+                .remove("asked_listings").remove("asked_usage").remove("asked_notif").apply()
+            return
+        }
+        Prefs.setAskedListings(context); Prefs.setAsked(context, "usage"); Prefs.setAsked(context, "notif")
         val cr = context.contentResolver
         runCatching { cr.delete(WatchNextPrograms.CONTENT_URI, null, null) }
         val titles = listOf("Дюна: Часть вторая" to 40, "Во все тяжкие" to 12, "Твоё имя" to 75, "Начало" to 98)
