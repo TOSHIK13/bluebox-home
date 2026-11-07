@@ -1,0 +1,16 @@
+# M6-H2: первый запуск Blue Box Home сразу просит все разрешения (READ_TV_LISTINGS -> доступ к использованию -> доступ к уведомлениям).
+# Предусловие: debug-APK app-home поставлен вручную. debug-seed с --ez reset_asked true сбрасывает флаги «уже спрашивали».
+adb "shell am force-stop app.bluebox.home.debug"
+adb "shell am broadcast -a app.bluebox.home.SEED -n app.bluebox.home.debug/app.bluebox.home.SeedReceiver --ez reset_asked true"
+adb "shell am start -n app.bluebox.home.debug/app.bluebox.home.HomeActivity"
+wait 4
+# шаг 1 - системный диалог runtime-разрешения или сразу экран доступа к использованию; Back закрывает шаг, Home возвращается и спрашивает следующий
+keys "BACK"
+wait 3
+keys "BACK"
+wait 3
+keys "BACK"
+wait 3
+# после трёх шагов Home открыт и больше ничего не спрашивает
+adb "shell am start -n app.bluebox.home.debug/app.bluebox.home.HomeActivity"
+wait-for "Продолжить просмотр" 15

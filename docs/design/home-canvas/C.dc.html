@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Home C: афиша с деталями</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#15212a}
+.tv{font-family:Roboto,"Noto Sans",system-ui,sans-serif;color:#fff}
+.chip{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:4px;background:rgba(255,255,255,0.12);font-size:14px;font-weight:500;line-height:18px}
+</style>
+</helmet>
+<div class="tv" style="position:relative;width:960px;height:540px;overflow:hidden;background:#15212a">
+  <!-- full-bleed backdrop -->
+  <div style="position:absolute;left:0;top:0;width:960px;height:540px;background:linear-gradient(135deg,#3b2a55,#1d4a6b)"></div>
+  <div style="position:absolute;left:0;top:0;width:960px;height:540px;background:linear-gradient(90deg,rgba(21,33,42,0.92) 30%,rgba(21,33,42,0.25) 100%)"></div>
+  <div style="position:absolute;left:0;top:240px;width:960px;height:300px;background:linear-gradient(180deg,rgba(21,33,42,0),#15212a 80%)"></div>
+
+  <!-- dock with labels on focus -->
+  <div style="position:absolute;left:0;top:0;width:72px;height:540px;box-sizing:border-box;padding:20px 0;display:flex;flex-direction:column;align-items:center;gap:10px;background:rgba(10,14,18,0.55)">
+    <sc-for list="{{apps}}" as="a" hint-placeholder-count="5">
+      <div style="width:44px;height:44px;border-radius:8px;background:{{a.bg}};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:{{a.fg}}">{{a.t}}</div>
+    </sc-for>
+    <div style="flex-grow:1"></div>
+    <div style="width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><rect x="4" y="4" width="4" height="4"/><rect x="10" y="4" width="4" height="4"/><rect x="16" y="4" width="4" height="4"/><rect x="4" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="16" y="10" width="4" height="4"/><rect x="4" y="16" width="4" height="4"/><rect x="10" y="16" width="4" height="4"/><rect x="16" y="16" width="4" height="4"/></svg></div>
+  </div>
+
+  <div style="position:absolute;right:56px;top:30px;font-size:28px;line-height:34px;font-weight:500">16:41</div>
+
+  <!-- left: poster + info -->
+  <div style="position:absolute;left:96px;top:36px;width:120px;height:180px;border-radius:8px;background:linear-gradient(160deg,#4a2a5a,#1d3a5a);box-shadow:0 8px 24px rgba(0,0,0,0.5)"></div>
+  <div style="position:absolute;left:236px;top:36px;width:560px;display:flex;flex-direction:column;gap:8px">
+    <span style="font-size:14px;line-height:18px;font-weight:500;color:rgba(255,255,255,0.72)">Следующая серия · 5 из 24</span>
+    <div style="font-size:32px;line-height:40px;font-weight:500">Магическая битва</div>
+    <div style="font-size:16px;line-height:22px;color:rgba(255,255,255,0.72)">Скрытый инвентарь · сезон 2</div>
+    <div style="display:flex;gap:8px"><span class="chip" style="background:#2a6ef0">★ 8,6</span><span class="chip">2023</span><span class="chip">16+</span><span class="chip">24 мин</span></div>
+    <div style="font-size:16px;line-height:24px;color:rgba(255,255,255,0.72)">Юдзи вступает в школу магов и узнаёт цену силы. Новая серия вышла в четверг и переведена полностью.</div>
+    <div style="font-size:14px;line-height:20px;color:rgba(255,255,255,0.56)">Режиссёр: Сунао Тэрао · В ролях: Юдзи Итадори, Мегуми Фусигуро</div>
+  </div>
+
+  <!-- single big row of wide cards with details -->
+  <div style="position:absolute;left:96px;top:300px;font-size:20px;line-height:28px;font-weight:500">Продолжить просмотр</div>
+  <div style="position:absolute;left:96px;top:336px;display:flex;gap:16px">
+    <sc-for list="{{wide}}" as="w" hint-placeholder-count="4">
+      <div style="width:200px">
+        <div style="position:relative;width:200px;height:112px;border-radius:8px;overflow:hidden;box-sizing:border-box;border:{{w.ring}};background:{{w.bg}}">
+          <span style="position:absolute;right:8px;top:8px;height:18px;line-height:18px;padding:0 6px;border-radius:3px;background:rgba(0,0,0,0.65);font-size:12px;font-weight:500">{{w.left}}</span>
+          <div style="position:absolute;left:0;bottom:0;width:{{w.progress}};height:4px;background:#2f7bff"></div>
+        </div>
+        <div style="font-size:14px;line-height:18px;font-weight:500;margin-top:8px">{{w.title}}</div>
+        <div style="font-size:12px;line-height:16px;color:rgba(255,255,255,0.56)">{{w.sub}}</div>
+      </div>
+    </sc-for>
+  </div>
+  <div style="position:absolute;left:96px;top:496px;font-size:14px;line-height:18px;color:rgba(255,255,255,0.56)">ещё ↓ Новинки · Скоро выйдет · Рекомендации</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":540}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      apps: [
+        { bg: '#e53935', fg: '#fff', t: 'AL' }, { bg: '#1d1d1d', fg: '#f2c14e', t: 'Pl' },
+        { bg: '#ff6a00', fg: '#fff', t: 'Кп' }, { bg: '#2a6ef0', fg: '#fff', t: 'BB' }, { bg: '#2c373f', fg: '#fff', t: 'HD' }
+      ],
+      wide: [
+        { title: 'Магическая битва', sub: 'С2 · Е5', left: '11 мин', bg: 'linear-gradient(135deg,#3b2a55,#1d4a6b)', progress: '52%', ring: '3px solid #fff' },
+        { title: 'Герой четвёртой стены', sub: 'С1 · Е2', left: '38 мин', bg: 'linear-gradient(135deg,#2a3a4a,#4a3a2a)', progress: '12%', ring: '3px solid transparent' },
+        { title: '16 желаний', sub: 'Фильм · 2022', left: '36 мин', bg: 'linear-gradient(135deg,#5a2a4a,#2a2a5a)', progress: '70%', ring: '3px solid transparent' },
+        { title: 'Хороший доктор', sub: 'С3 · Е9', left: '29 мин', bg: 'linear-gradient(135deg,#1d4a4a,#2a3a5a)', progress: '30%', ring: '3px solid transparent' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

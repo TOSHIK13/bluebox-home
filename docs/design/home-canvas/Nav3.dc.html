@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Home A3: фокус в столбике</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#15212a}
+.tv{font-family:Roboto,"Noto Sans",system-ui,sans-serif;color:#fff}
+</style>
+</helmet>
+<div class="tv" style="position:relative;width:960px;height:540px;overflow:hidden;background:#15212a">
+  <div style="position:absolute;left:0;top:0;width:960px;height:540px;background:linear-gradient(135deg,#4a3470,#1d5a82 60%,#2a7a8a)"></div>
+  <div style="position:absolute;left:0;top:0;width:960px;height:540px;background:rgba(21,33,42,0.55)"></div>
+  <div style="position:absolute;left:0;top:290px;width:960px;height:250px;background:linear-gradient(180deg,rgba(21,33,42,0),rgba(21,33,42,0.92))"></div>
+
+  <!-- content stays in place, slightly dimmed -->
+  <div style="position:absolute;left:104px;top:300px;width:560px;opacity:0.7">
+    <div style="font-size:14px;line-height:18px;font-weight:500;color:rgba(255,255,255,0.8)">Продолжить просмотр</div>
+    <div style="font-size:42px;line-height:50px;font-weight:500;margin-top:2px">Магическая битва</div>
+  </div>
+  <div style="position:absolute;left:104px;top:392px;display:flex;gap:16px;opacity:0.7">
+    <sc-for list="{{wide}}" as="w" hint-placeholder-count="5">
+      <div style="position:relative;width:168px;height:94px;margin-top:5px;border-radius:8px;overflow:hidden;background:{{w.bg}}">
+        <span style="position:absolute;left:8px;bottom:10px;height:18px;line-height:18px;padding:0 6px;border-radius:3px;background:rgba(0,0,0,0.6);font-size:12px;font-weight:500">{{w.ep}}</span>
+        <div style="position:absolute;left:0;bottom:0;width:{{w.progress}};height:4px;background:#2f7bff"></div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- expanded dock with labels, over the content -->
+  <div style="position:absolute;left:0;top:0;width:240px;height:540px;box-sizing:border-box;padding:20px 14px;display:flex;flex-direction:column;gap:8px;background:rgba(10,14,18,0.82);box-shadow:8px 0 24px rgba(0,0,0,0.4)">
+    <sc-for list="{{items}}" as="i" hint-placeholder-count="8">
+      <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 8px;border-radius:8px;box-sizing:border-box;background:{{i.sel}};border:{{i.ring}}">
+        <div style="width:28px;height:28px;border-radius:6px;background:{{i.bg}};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:{{i.fg}}">{{i.t}}</div>
+        <span style="font-size:16px;line-height:22px;font-weight:500">{{i.name}}</span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":540}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const none = 'transparent';
+    return {
+      items: [
+        { t: '⌕', bg: 'rgba(255,255,255,0.12)', fg: '#fff', name: 'Поиск', sel: none, ring: '2px solid transparent' },
+        { t: 'AL', bg: '#e53935', fg: '#fff', name: 'AniLibria', sel: none, ring: '2px solid transparent' },
+        { t: 'Pl', bg: '#1d1d1d', fg: '#f2c14e', name: 'Plex', sel: none, ring: '2px solid transparent' },
+        { t: 'Кп', bg: '#ff6a00', fg: '#fff', name: 'Кинопоиск', sel: none, ring: '2px solid transparent' },
+        { t: 'BB', bg: '#2a6ef0', fg: '#fff', name: 'Blue Box', sel: 'rgba(255,255,255,0.16)', ring: '2px solid #fff' },
+        { t: 'HD', bg: '#2c373f', fg: '#fff', name: 'HDRezka', sel: none, ring: '2px solid transparent' },
+        { t: '▦', bg: 'rgba(255,255,255,0.12)', fg: '#fff', name: 'Все приложения', sel: none, ring: '2px solid transparent' },
+        { t: '⚙', bg: 'rgba(255,255,255,0.12)', fg: '#fff', name: 'Настройки', sel: none, ring: '2px solid transparent' }
+      ],
+      wide: [
+        { ep: 'С2 · Е5', bg: 'linear-gradient(135deg,#4a3470,#1d5a82)', progress: '52%' },
+        { ep: 'С1 · Е2', bg: 'linear-gradient(135deg,#2a3a4a,#4a3a2a)', progress: '12%' },
+        { ep: 'Фильм', bg: 'linear-gradient(135deg,#5a2a4a,#2a2a5a)', progress: '70%' },
+        { ep: 'С3 · Е9', bg: 'linear-gradient(135deg,#1d4a4a,#2a3a5a)', progress: '30%' },
+        { ep: 'С1 · Е11', bg: 'linear-gradient(135deg,#4a4a2a,#3a2a5a)', progress: '85%' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

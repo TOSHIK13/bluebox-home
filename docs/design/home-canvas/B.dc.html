@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Home B: много строк и каналов</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#15212a}
+.tv{font-family:Roboto,"Noto Sans",system-ui,sans-serif;color:#fff}
+</style>
+</helmet>
+<div class="tv" style="position:relative;width:960px;height:540px;overflow:hidden;background:#15212a">
+  <!-- slim backdrop strip -->
+  <div style="position:absolute;left:0;top:0;width:960px;height:190px;background:linear-gradient(90deg,#15212a 30%,rgba(21,33,42,0.2) 90%),linear-gradient(135deg,#3b2a55,#1d4a6b)"></div>
+  <div style="position:absolute;left:0;top:90px;width:960px;height:100px;background:linear-gradient(180deg,rgba(21,33,42,0),#15212a)"></div>
+
+  <!-- dock -->
+  <div style="position:absolute;left:0;top:0;width:72px;height:540px;box-sizing:border-box;padding:20px 0;display:flex;flex-direction:column;align-items:center;gap:10px;background:rgba(10,14,18,0.55)">
+    <sc-for list="{{apps}}" as="a" hint-placeholder-count="6">
+      <div style="width:44px;height:44px;border-radius:8px;background:{{a.bg}};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:{{a.fg}}">{{a.t}}</div>
+    </sc-for>
+    <div style="flex-grow:1"></div>
+    <div style="width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><rect x="4" y="4" width="4" height="4"/><rect x="10" y="4" width="4" height="4"/><rect x="16" y="4" width="4" height="4"/><rect x="4" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="16" y="10" width="4" height="4"/><rect x="4" y="16" width="4" height="4"/><rect x="10" y="16" width="4" height="4"/><rect x="16" y="16" width="4" height="4"/></svg></div>
+  </div>
+
+  <!-- compact header -->
+  <div style="position:absolute;left:96px;top:24px;width:560px">
+    <div style="font-size:14px;line-height:18px;font-weight:500;color:rgba(255,255,255,0.72)">Сезон 2 · Серия 5 · осталось 11 мин</div>
+    <div style="font-size:28px;line-height:36px;font-weight:500;margin-top:2px">Магическая битва</div>
+    <div style="font-size:14px;line-height:20px;color:rgba(255,255,255,0.72);margin-top:4px">★ 8,6 · 2023 · 16+ · Экшен, фэнтези · AniLibria</div>
+  </div>
+  <div style="position:absolute;right:56px;top:24px;text-align:right">
+    <div style="font-size:28px;line-height:34px;font-weight:500">16:41</div>
+    <div style="font-size:14px;line-height:18px;color:rgba(255,255,255,0.72)">7 ноября</div>
+  </div>
+
+  <!-- rows -->
+  <div style="position:absolute;left:96px;top:150px;right:0">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:18px;line-height:24px;font-weight:500">Продолжить просмотр</span><span style="font-size:12px;color:rgba(255,255,255,0.56)">Watch Next</span></div>
+    <div style="display:flex;gap:12px">
+      <sc-for list="{{wide}}" as="w" hint-placeholder-count="4">
+        <div style="position:relative;width:160px;height:90px;border-radius:8px;overflow:hidden;box-sizing:border-box;border:{{w.ring}};background:{{w.bg}}">
+          <div style="position:absolute;left:0;right:0;bottom:0;height:44px;background:linear-gradient(180deg,rgba(10,14,18,0),rgba(10,14,18,0.85))"></div>
+          <div style="position:absolute;left:8px;right:8px;bottom:9px;font-size:12px;line-height:16px;font-weight:500">{{w.title}}</div>
+          <div style="position:absolute;left:0;bottom:0;width:{{w.progress}};height:3px;background:#2f7bff"></div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin:18px 0 6px"><span style="font-size:18px;line-height:24px;font-weight:500">Новинки</span><span style="font-size:12px;color:rgba(255,255,255,0.56)">канал · HDRezka</span></div>
+    <div style="display:flex;gap:12px">
+      <sc-for list="{{posters}}" as="p" hint-placeholder-count="8">
+        <div style="position:relative;width:64px;height:96px;border-radius:6px;background:{{p.bg}}"><span style="position:absolute;left:4px;top:4px;height:16px;line-height:16px;padding:0 5px;border-radius:3px;background:rgba(0,0,0,0.6);font-size:11px;font-weight:500">{{p.b}}</span></div>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin:18px 0 6px"><span style="font-size:18px;line-height:24px;font-weight:500">Скоро выйдет</span><span style="font-size:12px;color:rgba(255,255,255,0.56)">канал · Кинопоиск</span></div>
+    <div style="display:flex;gap:12px">
+      <sc-for list="{{soon}}" as="s" hint-placeholder-count="4">
+        <div style="position:relative;width:160px;height:90px;border-radius:8px;background:{{s.bg}}"><span style="position:absolute;left:8px;bottom:8px;font-size:12px;line-height:16px;font-weight:500">{{s.d}}</span></div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":540}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      apps: [
+        { bg: '#e53935', fg: '#fff', t: 'AL' }, { bg: '#1d1d1d', fg: '#f2c14e', t: 'Pl' },
+        { bg: '#ff6a00', fg: '#fff', t: 'Кп' }, { bg: '#2a6ef0', fg: '#fff', t: 'BB' },
+        { bg: '#2c373f', fg: '#fff', t: 'HD' }, { bg: '#7a3ff0', fg: '#fff', t: 'YT' }
+      ],
+      wide: [
+        { title: 'Магическая битва', bg: 'linear-gradient(135deg,#3b2a55,#1d4a6b)', progress: '52%', ring: '3px solid #fff' },
+        { title: 'Герой четвёртой стены', bg: 'linear-gradient(135deg,#2a3a4a,#4a3a2a)', progress: '12%', ring: '3px solid transparent' },
+        { title: '16 желаний', bg: 'linear-gradient(135deg,#5a2a4a,#2a2a5a)', progress: '70%', ring: '3px solid transparent' },
+        { title: 'Хороший доктор', bg: 'linear-gradient(135deg,#1d4a4a,#2a3a5a)', progress: '30%', ring: '3px solid transparent' },
+        { title: 'Пингвин', bg: 'linear-gradient(135deg,#4a4a2a,#3a2a5a)', progress: '85%', ring: '3px solid transparent' }
+      ],
+      posters: [
+        { b: '8,1', bg: 'linear-gradient(160deg,#4a2a5a,#1d3a5a)' }, { b: '7,4', bg: 'linear-gradient(160deg,#5a3a2a,#2a4a3a)' },
+        { b: '6,9', bg: 'linear-gradient(160deg,#2a4a5a,#5a2a3a)' }, { b: '7,7', bg: 'linear-gradient(160deg,#3a5a2a,#2a2a5a)' },
+        { b: '8,3', bg: 'linear-gradient(160deg,#5a2a2a,#2a4a4a)' }, { b: '7,0', bg: 'linear-gradient(160deg,#2a3a5a,#5a4a2a)' },
+        { b: '6,5', bg: 'linear-gradient(160deg,#4a4a2a,#3a2a5a)' }, { b: '7,9', bg: 'linear-gradient(160deg,#2a5a4a,#5a2a4a)' },
+        { b: '8,0', bg: 'linear-gradient(160deg,#5a4a2a,#2a3a4a)' }, { b: '7,2', bg: 'linear-gradient(160deg,#3a2a5a,#4a5a2a)' }
+      ],
+      soon: [
+        { d: '14 ноября', bg: 'linear-gradient(135deg,#2a3a5a,#5a2a4a)' }, { d: '21 ноября', bg: 'linear-gradient(135deg,#1d4a4a,#4a3a2a)' },
+        { d: '5 декабря', bg: 'linear-gradient(135deg,#4a2a2a,#2a4a5a)' }, { d: '19 декабря', bg: 'linear-gradient(135deg,#3a4a2a,#2a2a4a)' },
+        { d: '9 января', bg: 'linear-gradient(135deg,#4a2a5a,#2a5a4a)' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

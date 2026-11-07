@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Home A2: фокус во второй строке</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#15212a}
+.tv{font-family:Roboto,"Noto Sans",system-ui,sans-serif;color:#fff}
+</style>
+</helmet>
+<div class="tv" style="position:relative;width:960px;height:540px;overflow:hidden;background:#15212a">
+  <!-- backdrop: no wide image for this card, so the poster is blurred and darkened -->
+  <div style="position:absolute;left:-40px;top:-40px;width:1040px;height:620px;background:linear-gradient(160deg,#5a2a3a,#2a3a6a 60%,#1d4a5a);filter:blur(24px)"></div>
+  <div style="position:absolute;left:0;top:0;width:960px;height:540px;background:linear-gradient(90deg,rgba(21,33,42,0.7) 0%,rgba(21,33,42,0.1) 60%)"></div>
+  <div style="position:absolute;left:0;top:250px;width:960px;height:290px;background:linear-gradient(180deg,rgba(21,33,42,0),rgba(21,33,42,0.92))"></div>
+
+  <!-- previous row has scrolled up: only its bottom edge is left -->
+  <div style="position:absolute;left:104px;top:-70px;display:flex;gap:16px;opacity:0.6">
+    <sc-for list="{{wide}}" as="w" hint-placeholder-count="5">
+      <div style="width:168px;height:94px;border-radius:8px;background:{{w.bg}}"></div>
+    </sc-for>
+  </div>
+
+  <!-- dock -->
+  <div style="position:absolute;left:0;top:0;width:72px;height:540px;box-sizing:border-box;padding:20px 0;display:flex;flex-direction:column;align-items:center;gap:10px;background:rgba(10,14,18,0.45)">
+    <div style="width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,0.1)"></div>
+    <sc-for list="{{apps}}" as="a" hint-placeholder-count="5">
+      <div style="width:44px;height:44px;border-radius:8px;background:{{a.bg}};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:{{a.fg}}">{{a.t}}</div>
+    </sc-for>
+  </div>
+  <div style="position:absolute;right:48px;top:28px;font-size:22px;line-height:28px;font-weight:500;text-shadow:0 1px 6px rgba(0,0,0,0.5)">16:41</div>
+
+  <!-- title of the focused poster -->
+  <div style="position:absolute;left:104px;top:196px;width:560px">
+    <div style="font-size:14px;line-height:18px;font-weight:500;color:rgba(255,255,255,0.8)">Новинки · HDRezka</div>
+    <div style="font-size:42px;line-height:50px;font-weight:500;margin-top:2px;text-shadow:0 2px 12px rgba(0,0,0,0.5)">Тень над городом</div>
+  </div>
+
+  <!-- poster row, focused poster is larger -->
+  <div style="position:absolute;left:104px;top:276px;display:flex;gap:16px;align-items:flex-start">
+    <sc-for list="{{posters}}" as="p" hint-placeholder-count="7">
+      <div style="position:relative;width:{{p.w}}px;height:{{p.h}}px;margin-top:{{p.mt}}px;border-radius:8px;box-sizing:border-box;border:{{p.ring}};background:{{p.bg}};box-shadow:0 6px 18px rgba(0,0,0,0.35)"></div>
+    </sc-for>
+  </div>
+
+  <!-- next row hints -->
+  <div style="position:absolute;left:104px;top:512px;font-size:14px;line-height:18px;font-weight:500;color:rgba(255,255,255,0.6)">Скоро выйдет · Кинопоиск</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":540}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      apps: [
+        { bg: '#e53935', fg: '#fff', t: 'AL' }, { bg: '#1d1d1d', fg: '#f2c14e', t: 'Pl' },
+        { bg: '#ff6a00', fg: '#fff', t: 'Кп' }, { bg: '#2a6ef0', fg: '#fff', t: 'BB' }, { bg: '#2c373f', fg: '#fff', t: 'HD' }
+      ],
+      wide: [
+        { bg: 'linear-gradient(135deg,#4a3470,#1d5a82)' }, { bg: 'linear-gradient(135deg,#2a3a4a,#4a3a2a)' },
+        { bg: 'linear-gradient(135deg,#5a2a4a,#2a2a5a)' }, { bg: 'linear-gradient(135deg,#1d4a4a,#2a3a5a)' },
+        { bg: 'linear-gradient(135deg,#4a4a2a,#3a2a5a)' }
+      ],
+      posters: [
+        { w: 150, h: 225, mt: 0, ring: '3px solid #fff', bg: 'linear-gradient(160deg,#5a2a3a,#2a3a6a)' },
+        { w: 132, h: 198, mt: 13, ring: '3px solid transparent', bg: 'linear-gradient(160deg,#5a3a2a,#2a4a3a)' },
+        { w: 132, h: 198, mt: 13, ring: '3px solid transparent', bg: 'linear-gradient(160deg,#2a4a5a,#5a2a3a)' },
+        { w: 132, h: 198, mt: 13, ring: '3px solid transparent', bg: 'linear-gradient(160deg,#3a5a2a,#2a2a5a)' },
+        { w: 132, h: 198, mt: 13, ring: '3px solid transparent', bg: 'linear-gradient(160deg,#5a2a2a,#2a4a4a)' },
+        { w: 132, h: 198, mt: 13, ring: '3px solid transparent', bg: 'linear-gradient(160deg,#2a3a5a,#5a4a2a)' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Home A: просторный экран</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#15212a}
+.tv{font-family:Roboto,"Noto Sans",system-ui,sans-serif;color:#fff}
+</style>
+</helmet>
+<div class="tv" style="position:relative;width:960px;height:540px;overflow:hidden;background:#15212a">
+  <!-- full-screen backdrop of the focused card (THUMBNAIL_URI 16:9) -->
+  <div style="position:absolute;left:0;top:0;width:960px;height:540px;background:linear-gradient(135deg,#4a3470,#1d5a82 60%,#2a7a8a)"></div>
+  <!-- light scrims only where text sits -->
+  <div style="position:absolute;left:0;top:0;width:960px;height:540px;background:linear-gradient(90deg,rgba(21,33,42,0.7) 0%,rgba(21,33,42,0) 55%)"></div>
+  <div style="position:absolute;left:0;top:290px;width:960px;height:250px;background:linear-gradient(180deg,rgba(21,33,42,0),rgba(21,33,42,0.92))"></div>
+
+  <!-- left dock -->
+  <div style="position:absolute;left:0;top:0;width:72px;height:540px;box-sizing:border-box;padding:20px 0;display:flex;flex-direction:column;align-items:center;gap:10px;background:rgba(10,14,18,0.45)">
+    <div style="width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l5 5"/></svg></div>
+    <sc-for list="{{apps}}" as="a" hint-placeholder-count="5">
+      <div style="width:44px;height:44px;border-radius:8px;background:{{a.bg}};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:{{a.fg}}">{{a.t}}</div>
+    </sc-for>
+    <div style="width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><rect x="4" y="4" width="4" height="4"/><rect x="10" y="4" width="4" height="4"/><rect x="16" y="4" width="4" height="4"/><rect x="4" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="16" y="10" width="4" height="4"/><rect x="4" y="16" width="4" height="4"/><rect x="10" y="16" width="4" height="4"/><rect x="16" y="16" width="4" height="4"/></svg></div>
+    <div style="flex-grow:1"></div>
+    <div style="width:10px;height:10px;border-radius:5px;background:#7bd88f" aria-label="VPN подключён" role="img"></div>
+    <div style="width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></div>
+  </div>
+
+  <!-- clock, small -->
+  <div style="position:absolute;right:48px;top:28px;font-size:22px;line-height:28px;font-weight:500;text-shadow:0 1px 6px rgba(0,0,0,0.5)">16:41</div>
+
+  <!-- minimal info: title, episode, progress -->
+  <div style="position:absolute;left:104px;top:300px;width:560px">
+    <div style="font-size:14px;line-height:18px;font-weight:500;color:rgba(255,255,255,0.8)">Продолжить просмотр</div>
+    <div style="font-size:42px;line-height:50px;font-weight:500;margin-top:2px;text-shadow:0 2px 12px rgba(0,0,0,0.5)">Магическая битва</div>
+  </div>
+
+  <!-- one calm row of wide cards, no titles on cards -->
+  <div style="position:absolute;left:104px;top:392px;display:flex;gap:16px">
+    <sc-for list="{{wide}}" as="w" hint-placeholder-count="5">
+      <div style="position:relative;width:{{w.w}}px;height:{{w.h}}px;margin-top:{{w.mt}}px;border-radius:8px;overflow:hidden;box-sizing:border-box;border:{{w.ring}};background:{{w.bg}};box-shadow:0 6px 18px rgba(0,0,0,0.35)">
+        <span style="position:absolute;left:8px;bottom:10px;height:18px;line-height:18px;padding:0 6px;border-radius:3px;background:rgba(0,0,0,0.6);font-size:12px;font-weight:500">{{w.ep}}</span>
+        <div style="position:absolute;left:0;bottom:0;width:{{w.progress}};height:4px;background:#2f7bff"></div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- next channel row only hints from the bottom edge -->
+  <div style="position:absolute;left:104px;top:512px;font-size:14px;line-height:18px;font-weight:500;color:rgba(255,255,255,0.6)">Новинки · HDRezka</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":540}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      apps: [
+        { bg: '#e53935', fg: '#fff', t: 'AL' },
+        { bg: '#1d1d1d', fg: '#f2c14e', t: 'Pl' },
+        { bg: '#ff6a00', fg: '#fff', t: 'Кп' },
+        { bg: '#2a6ef0', fg: '#fff', t: 'BB' },
+        { bg: '#2c373f', fg: '#fff', t: 'HD' }
+      ],
+      wide: [
+        { w: 184, h: 104, mt: 0, ep: 'С2 · Е5', bg: 'linear-gradient(135deg,#4a3470,#1d5a82)', progress: '52%', ring: '3px solid #fff' },
+        { w: 168, h: 94, mt: 5, ep: 'С1 · Е2', bg: 'linear-gradient(135deg,#2a3a4a,#4a3a2a)', progress: '12%', ring: '3px solid transparent' },
+        { w: 168, h: 94, mt: 5, ep: 'Фильм', bg: 'linear-gradient(135deg,#5a2a4a,#2a2a5a)', progress: '70%', ring: '3px solid transparent' },
+        { w: 168, h: 94, mt: 5, ep: 'С3 · Е9', bg: 'linear-gradient(135deg,#1d4a4a,#2a3a5a)', progress: '30%', ring: '3px solid transparent' },
+        { w: 168, h: 94, mt: 5, ep: 'С1 · Е11', bg: 'linear-gradient(135deg,#4a4a2a,#3a2a5a)', progress: '85%', ring: '3px solid transparent' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

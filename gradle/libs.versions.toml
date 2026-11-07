@@ -1,0 +1,13 @@
+[versions]
+android-plugin = "9.4.1"
+kotlin = "2.4.20"
+compileSdk = "37"
+targetSdk = "36"
+jvmToolchain = "17"
+
+[libraries]
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "android-plugin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

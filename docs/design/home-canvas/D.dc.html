@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Home D: какое поле куда</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#15212a}
+.tv{font-family:Roboto,"Noto Sans",system-ui,sans-serif;color:#fff}
+th{text-align:left;font-size:12px;line-height:16px;font-weight:500;color:rgba(255,255,255,0.56);padding:0 12px 8px 0}
+td{font-size:14px;line-height:20px;padding:7px 12px 7px 0;border-top:1px solid rgba(255,255,255,0.12);vertical-align:top}
+.tag{display:inline-block;height:18px;line-height:18px;padding:0 6px;border-radius:3px;font-size:12px;font-weight:500}
+</style>
+</helmet>
+<div class="tv" style="width:960px;height:780px;box-sizing:border-box;padding:28px 40px;background:#15212a;overflow:hidden">
+  <div style="font-size:24px;line-height:32px;font-weight:500">Поля Watch Next и каналов → что показать на Home</div>
+  <div style="font-size:14px;line-height:20px;color:rgba(255,255,255,0.72);margin:4px 0 16px">«Сейчас» — Blue Box уже публикует и Home читает. «Нужно передать» — делаем в наших приложениях. «Нужно читать» — доработка Home.</div>
+  <table style="border-collapse:collapse;width:100%">
+    <thead><tr><th>Поле</th><th>Где на экране</th><th>Вариант</th><th>Статус</th></tr></thead>
+    <tbody>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="14">
+        <tr>
+          <td style="font-family:ui-monospace,Consolas,monospace;font-size:13px">{{r.f}}</td>
+          <td>{{r.w}}</td>
+          <td style="color:rgba(255,255,255,0.72)">{{r.v}}</td>
+          <td><span class="tag" style="background:{{r.bg}}">{{r.s}}</span></td>
+        </tr>
+      </sc-for>
+    </tbody>
+  </table>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":780}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ok = 'rgba(123,216,143,0.28)', todo = 'rgba(47,123,255,0.35)', read = 'rgba(242,193,78,0.3)';
+    return {
+      rows: [
+        { f: 'TITLE', w: 'Заголовок карточки и героя', v: 'A B C', s: 'сейчас', bg: ok },
+        { f: 'POSTER_ART_URI (2:3)', w: 'Постер в строках каналов', v: 'A B C', s: 'сейчас', bg: ok },
+        { f: 'THUMBNAIL_URI (16:9)', w: 'Широкая карточка и фон экрана', v: 'A B C', s: 'Blue Box: добавлено', bg: ok },
+        { f: 'SEASON / EPISODE_NUMBER', w: 'Подпись «С2 · Е5»', v: 'A B C', s: 'сейчас', bg: ok },
+        { f: 'EPISODE_TITLE', w: 'Название серии под заголовком', v: 'A C', s: 'нужно передать', bg: todo },
+        { f: 'LAST_PLAYBACK_POSITION / DURATION', w: 'Полоса прогресса, «осталось 11 мин»', v: 'A B C', s: 'сейчас', bg: ok },
+        { f: 'SHORT_DESCRIPTION', w: 'Описание в герое', v: 'A C', s: 'нужно передать', bg: todo },
+        { f: 'REVIEW_RATING (+ STYLE)', w: 'Чип «★ 8,6»', v: 'A B C', s: 'нужно передать', bg: todo },
+        { f: 'RELEASE_DATE', w: 'Год в чипах; дата в «Скоро выйдет»', v: 'A B C', s: 'нужно передать', bg: todo },
+        { f: 'CONTENT_RATING', w: 'Чип «16+»', v: 'A B C', s: 'нужно передать', bg: todo },
+        { f: 'GENRE / CANONICAL_GENRE', w: 'Чип жанров', v: 'A B', s: 'нужно передать', bg: todo },
+        { f: 'AUTHOR / STARRING_ACTORS', w: 'Строка «Режиссёр, в ролях»', v: 'C', s: 'нужно передать', bg: todo },
+        { f: 'AVAILABILITY / OFFER_PRICE', w: 'Бейдж «подписка / бесплатно»', v: '—', s: 'не берём', bg: 'rgba(255,255,255,0.12)' },
+        { f: 'Channel: DISPLAY_NAME, LOGO', w: 'Заголовок строки «Новинки · HDRezka»', v: 'A B', s: 'нужно читать', bg: read },
+        { f: 'PreviewProgram (каналы других приложений)', w: 'Дополнительные строки под «Продолжить»', v: 'A B C', s: 'нужно читать', bg: read },
+        { f: 'LOGO / иконка пакета приложения', w: 'Бейдж источника на карточке', v: 'A B', s: 'сейчас', bg: ok }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

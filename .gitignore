@@ -1,0 +1,15 @@
+build/
+.gradle/
+.kotlin/
+local.properties
+*.jks
+*.keystore
+.idea/
+captures/
+*.iml
+*.hprof
+.cxx/
+.claude/stop-hook-state.json
+.playwright-mcp/
+
+verify.log
