@@ -1,4 +1,4 @@
-# Blue Box Home — лёгкий лаунчер (M6-H1, M6-H2)
+﻿# Blue Box Home — лёгкий лаунчер (M6-H1, M6-H2)
 
 Основа — макет B (артефакт `9X9HE9BfZvxpyHRL2wXBJD`, v11). Отдельный APK `app.bluebox.home` (модуль `:app`), Views без Compose и DI: приставка Ugoos (Realtek RTD1325) упирается в отрисовку.
 
@@ -12,8 +12,13 @@
 2. UI, Watch Next, VPN → сборка `:app:assembleDebug`.
 3. Смоук на эмуляторе → `tv.ps1 scenario scripts/scenarios/m6-home-smoke.txt` (M6-H2).
 
-## Риск данных
-`TvProvider` отдаёт стороннему приложению только его собственные строки Watch Next (pitfalls.md). Обычный Home без привилегий не увидит строки SmartTube и Blue Box. **Подтверждено на эмуляторе 2026-11-01:** две копии Home (`.debug` и `.debug.two`), вторая записала 4 строки — первая видит только свои (`packages=[app.bluebox.home.debug]`), `READ_EPG_DATA` выдать нельзя (`pm grant` → «not a changeable permission type»). Значит чужие строки (SmartTube) Home без привилегий не получит; свои строки и строки Blue Box — только через его собственный источник. Запасные пути: экспортируемый `ContentProvider` в Blue Box; privileged-установка на приставку; чтение через `adb shell pm grant`.
+## Данные Watch Next
+Контракт — строки `TvContract.WatchNextPrograms` от Blue Box (`docs/contracts.md` в репозитории Blue Box). Полное описание полей и правил — `docs/watch-next-contract.md`.
+- **Доступ.** Home запрашивает `READ_TV_LISTINGS` (`dangerous`, runtime-диалог, права лаунчера не нужны; проверено на реальном ТВ 2026-11-07, `docs/research/launcher-android-tv.md`). С ним TvProvider отдаёт строки `package_name = Home OR searchable = 1` (у строк по умолчанию 1), запрос только без `selection`: `WatchNextSource` так и делает. Без разрешения (`READ_EPG_DATA` выдать нельзя) видны лишь свои строки: на эмуляторе 2026-11-01 две копии Home видели каждая только свои.
+- **Результат.** По скриншотам владельца (2026-11-07) Home выводит строки Blue Box на ТВ: заголовок, бейдж «С·Е»/«Фильм», полоса прогресса. Сами скриншоты в репозиторий не добавлены.
+- **Картинки.** Blue Box пишет постер 2:3 в `poster_art_uri` и бэкдроп 16:9 в `thumbnail_uri` (Blue Box PR #160, 2026-11-07). Home берёт `thumbnail_uri`, при его отсутствии `poster_art_uri`.
+- **Бейдж «НОВАЯ».** Нужен `WATCH_NEXT_TYPE_NEXT`/`NEW` при позиции 0. Blue Box пока всегда пишет `CONTINUE`, поэтому бейдж от Blue Box не появится (в debug-seed он есть).
+- **Картинки по сети.** Home грузит их сам (`Posters`, без Coil); из РФ без VPN/DNS постеры `image.tmdb.org` могут не показаться.
 
 ## Не проверено на приставке
 Станет ли Home «домом по умолчанию» на Google TV (выбор второго Home / отключение `launcherx`) — только владелец, на реальном ТВ.
