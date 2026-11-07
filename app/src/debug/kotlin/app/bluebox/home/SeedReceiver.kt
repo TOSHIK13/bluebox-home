@@ -66,11 +66,26 @@ private fun seedChannels(context: Context, n: Int) {
                 put(TvContract.PreviewPrograms.COLUMN_TITLE, "Ряд $c · видео $p")
                 put(TvContract.PreviewPrograms.COLUMN_INTENT_URI, "bluebox://seed/$c/$p")
                 put(TvContract.PreviewPrograms.COLUMN_WEIGHT, 100 - p)
+                if (c == 2) { // channel 2 carries tall 2:3 posters (a generated picture in the app cache), to test portrait shelves
+                    put(TvContract.PreviewPrograms.COLUMN_POSTER_ART_URI, poster(context, p).toString())
+                    put(TvContract.PreviewPrograms.COLUMN_POSTER_ART_ASPECT_RATIO, TvContract.PreviewPrograms.ASPECT_RATIO_2_3)
+                }
             }
             runCatching { cr.insert(TvContract.PreviewPrograms.CONTENT_URI, pv) }.onFailure { Log.w("BBHome", "seed program failed", it) }
         }
     }
     Log.i("BBHome", "seed channels=$n")
+}
+
+private fun poster(context: Context, n: Int): android.net.Uri {
+    val f = java.io.File(context.cacheDir, "seed_poster_$n.png")
+    val bmp = android.graphics.Bitmap.createBitmap(400, 600, android.graphics.Bitmap.Config.ARGB_8888)
+    val cv = android.graphics.Canvas(bmp)
+    cv.drawColor(android.graphics.Color.HSVToColor(floatArrayOf((n * 40f) % 360, 0.5f, 0.55f)))
+    val paint = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 160f; isAntiAlias = true }
+    cv.drawText("$n", 150f, 330f, paint)
+    f.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    return android.net.Uri.fromFile(f)
 }
 
 private data class Seed(val title: String, val pct: Int, val season: Int, val episode: Int, val fresh: Boolean = false)
