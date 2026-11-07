@@ -2,7 +2,7 @@
 
 Лёгкий лаунчер для Android TV (приставки с медленной отрисовкой): обычные Views, без Compose и сторонних библиотек.
 Показывает «Продолжить просмотр» из Watch Next (`TvContract.WatchNextPrograms`), строки каналов, закреплённые приложения слева.
-Отдельное приложение `app.bluebox.home`, связано с [Blue Box](https://github.com/TOSHIK13/BlueBox) только контрактом Watch Next.
+Отдельное приложение `app.bluebox.home`, связано с приложением Blue Box только контрактом Watch Next.
 
 ## Команды (PowerShell, из корня)
 | Что | Команда |
@@ -14,12 +14,12 @@
 Подкоманды `build`, `install`, `reset-app` и сценарии приложения Blue Box унаследованы из его репозитория и для Home не годятся.
 
 ## Окружение (`scripts/env.ps1`)
-Тулчейн лежит вне репозитория; пути задаются переменными, значения по умолчанию — для машины владельца.
+Тулчейн лежит вне репозитория; пути задаются переменными. Личные значения (пути, `BLUEBOX_TV` — host:port реального ТВ) можно держать в `%USERPROFILE%\.bluebox-home.ps1`: `env.ps1` подключает его первым, а хук защиты ТВ берёт оттуда адрес.
 | Переменная | Что | По умолчанию |
 |---|---|---|
-| `BLUEBOX_TOOLS` | каталог с `jdk-home.txt`, `android-sdk`, `android-user-home` | `D:\Ani\.gradle\codex-tools` |
-| `BLUEBOX_GRADLE_HOME` | записываемый Gradle-home | `D:\AI\.bluebox-gradle` |
-| `BLUEBOX_GRADLE_RO_CACHE` | кэш зависимостей только для чтения (необязателен) | `D:\Ani\.gradle\caches` |
+| `BLUEBOX_TOOLS` | каталог с `jdk-home.txt`, `android-sdk`, `android-user-home` | `<repo>\.tools` |
+| `BLUEBOX_GRADLE_HOME` | записываемый Gradle-home | `%USERPROFILE%\.bluebox-gradle` |
+| `BLUEBOX_GRADLE_RO_CACHE` | кэш зависимостей только для чтения (необязателен) | не задан |
 
 Нет JDK/SDK — `verify.ps1` выходит с кодом 2 «ПРОБЛЕМА ОКРУЖЕНИЯ». В worktree `local.properties` копируется из основного чекаута.
 
@@ -31,3 +31,6 @@
 - `docs/research/launcher-features.md` — что есть в лаунчерах Android TV.
 - `docs/research/launcher-android-tv.md` — проверки на реальном ТВ, что можно читать у других приложений.
 - `docs/design/` — макеты экрана.
+
+## Лицензия
+MIT, см. LICENSE.

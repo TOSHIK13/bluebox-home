@@ -3,7 +3,7 @@ Network adb device (host:port, e.g. the real TV): adb does not reconnect a dropp
 slept, rebooted or lost Wi-Fi it stays `offline` or vanishes from `adb devices` until someone runs `adb connect`.
 Connect-NetDevice brings it back before a command. Dot-sourced by tv.ps1 and perf-check.ps1.
 
-  $err = Connect-NetDevice $adbExe '192.168.1.151:5555'   # $null = ready ('device'); otherwise a Russian reason
+  $err = Connect-NetDevice $adbExe $env:BLUEBOX_TV   # $null = ready ('device'); otherwise a Russian reason
 Prints `reconnect: <serial> ...` (Write-Host) when it had to reconnect. Non host:port serials are returned as ready untouched.
 #>
 

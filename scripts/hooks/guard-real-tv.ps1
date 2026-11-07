@@ -1,12 +1,12 @@
 ﻿<#
 PreToolUse-hook (Bash/PowerShell): защита реального ТВ.
-Блокирует (exit 2): любое упоминание 192.168.1.151; adb без явного "-s emulator-NNNN" (кроме devices/version/start-server);
+Блокирует (exit 2): любое упоминание адреса ТВ (BLUEBOX_TV из окружения или из $HOME\.bluebox-home.ps1) и любого 192.168.x.x; adb без явного "-s emulator-NNNN" (кроме devices/version/start-server);
 tv.ps1/perf-check.ps1 с -Device tv / -AllowRealTv. Реальный ТВ — только командой, которую владелец запускает сам.
 
 ИСКЛЮЧЕНИЯ, разрешённые владельцем в чате (2026-10-01: сначала «разрешаю самому разворачивать версии приложения на ТВ по моему
 запросу», затем «запускай тестирование на реальном ТВ»). Только перечисленные формы, одной простой строкой без цепочек, подстановок
 и перенаправлений (`; & | ` $ ( ) { } < >` и переводы строк запрещены); всё прочее про ТВ по-прежнему блокируется:
-  1) `adb connect 192.168.1.151:5555`;
+  1) `adb connect <адрес ТВ>` (ровно значение BLUEBOX_TV);
   2) `powershell [-NoProfile] [-ExecutionPolicy Bypass] -File <путь>tv.ps1 -Device tv -AllowRealTv -Variant beta <подкоманда> [аргументы]`
      — подкоманды: install (без аргументов), start, stop, restart, keys, text, tap, swipe, wait, shot, focus, log, deeplink bluebox://…,
      start-time, adb (tv.ps1 сам пускает на ТВ только `shell getprop|dumpsys`), devices, expect-focus, expect-text, wait-for, expect-alive,
@@ -103,12 +103,19 @@ function Test-DeployScript($call) {
     return $allow
 }
 
-$tvConnect =$cmd -match '(?i)^\s*(?:[\w:./\\-]*[\\/])?adb(?:\.exe)?\s+connect\s+192\.168\.1\.151:5555\s*$'
+# Адрес реального ТВ в репозитории не хранится: BLUEBOX_TV (host:port) из окружения или строка BLUEBOX_TV в $HOME\.bluebox-home.ps1
+$tvAddr = $env:BLUEBOX_TV
+if (-not $tvAddr) {
+    $lf = Join-Path $HOME '.bluebox-home.ps1'
+    if (Test-Path $lf) { $m0 = [regex]::Match((Get-Content $lf -Raw), 'BLUEBOX_TV\s*=\s*[''"]([^''"]+)[''"]'); if ($m0.Success) { $tvAddr = $m0.Groups[1].Value } }
+}
+$tvHost = if ($tvAddr) { ($tvAddr -split ':')[0] } else { $null }
+$tvConnect = [bool]$tvAddr -and ($cmd -match ('(?i)^\s*(?:[\w:./\\-]*[\\/])?adb(?:\.exe)?\s+connect\s+' + [regex]::Escape($tvAddr) + '\s*$'))
 $call = Split-PowerShellCall $cmd
 $tvAllowed = $tvConnect -or ($null -ne $call -and ((Test-TvScript $call) -or (Test-PerfScript $call) -or (Test-DeployScript $call)))
 if ($tvAllowed) { exit 0 }
 
-if ($cmd -match '192\.168\.1\.151') { Block 'команда обращается к адресу реального ТВ' }
+if (($tvHost -and $cmd.Contains($tvHost)) -or $cmd -match '\b192\.168\.\d{1,3}\.\d{1,3}\b') { Block 'команда обращается к адресу реального ТВ' }
 if ($cmd -match '(?i)-AllowRealTv|-Device\s+["'']?tv\b') { Block 'tv.ps1/perf-check.ps1 с реальным устройством вне разрешённых форм' }
 foreach ($m in [regex]::Matches($cmd, '(?im)(?:^|[;&|({])\s*(?:&\s*)?["'']?(?:[^\s"'';&|]*[\\/])?adb(?:\.exe)?["'']?\s+([^|;&\r\n]*)')) {
     $rest = $m.Groups[1].Value

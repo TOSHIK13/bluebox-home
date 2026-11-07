@@ -69,7 +69,7 @@ UI probes (debug build only; keys = ProbeKeys in ui/components/Probe.kt, table c
                                  overlay, ready, rows, screen, items), e.g. expect-ui sheet=sheet:score, expect-ui screen=detail:ready
   wait-ui <field>=<regex> [sec=15]   the same with a longer wait - instead of wait-for "<title>" while a screen loads
 
-Safety: default device auto (emulator pool), `emu` = emulator-5554. Any non-emulator serial (-Device tv = 192.168.1.151:5555) needs -AllowRealTv,
+Safety: default device auto (emulator pool), `emu` = emulator-5554. Any non-emulator serial (-Device tv = $env:BLUEBOX_TV, host:port of the real box) needs -AllowRealTv,
 install there is allowed only for -Variant beta, and scenario / reset-app / proxy / emu / adb other than getprop|dumpsys are refused.
 Every adb call carries an explicit -s <serial>. pm clear is only ever run for our own package.
 Package: app.bluebox.tv.debug (default) | app.bluebox.tv.beta. Screenshots go to -Out (default %TEMP%\bluebox-shots\<worktree folder name>).
@@ -110,7 +110,7 @@ $appId = 'app.bluebox.home'
 $suffix = if ($Variant -eq 'beta') { '.beta' } else { '.debug' }
 $pkg = "$appId$suffix"
 $activity = "$pkg/$appId.HomeActivity"
-$serial = switch ($Device) { 'emu' { 'emulator-5554' } 'tv' { '192.168.1.151:5555' } default { $Device } }
+$serial = switch ($Device) { 'emu' { 'emulator-5554' } 'tv' { if (-not $env:BLUEBOX_TV) { throw 'BLUEBOX_TV (host:port of the TV) is not set: put it into $HOME\.bluebox-home.ps1' }; $env:BLUEBOX_TV } default { $Device } }
 $isEmulator = $serial -match '^(emulator-\d+|auto)$'   # 'auto' is resolved to a leased emulator before the command runs
 $adbExe = Join-Path $env:ANDROID_HOME 'platform-tools\adb.exe'
 function Get-StateFile { Join-Path $env:TEMP ("bluebox-tv-start-" + ($serial -replace '[^\w\.-]', '_') + ".txt") }
