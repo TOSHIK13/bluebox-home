@@ -6,120 +6,160 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.FrameLayout
 import app.bluebox.home.data.Apps
 import app.bluebox.home.data.NotificationFeed
+import app.bluebox.home.data.WatchNextSource
 
-/** Home settings: card backdrop switch and shortcuts to the system settings. Back returns to Home. */
+/**
+ * Home settings in the usual TV-settings layout: title on the left, one column of full-width rows on the right
+ * (name, optional hint, value or chevron), grouped by section. Back returns to Home.
+ */
 class SettingsActivity : Activity() {
     private lateinit var apps: Apps
-    private lateinit var backdropValue: TextView
-    private lateinit var permRow: LinearLayout
+    private lateinit var list: LinearLayout
+    private var focusIndex = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         apps = Apps(this)
+        val bg = Color.parseColor("#0f161b")
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0f161b"))
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(bg)
             setPadding(dp(Tok.SAFE_X), dp(Tok.SAFE_Y), dp(Tok.SAFE_X), dp(Tok.SAFE_Y))
         }
-        root.addView(label(getString(R.string.settings), 24, bold = true))
-        root.addView(space(0, 20))
+        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        left.addView(label(getString(R.string.settings), 30, bold = true))
+        left.addView(space(0, 8))
+        left.addView(label(getString(R.string.app_name), 14, Tok.text56))
+        root.addView(left, lp(dp(300), -1))
 
-        root.addView(label(getString(R.string.home_section), 16, Tok.text72, bold = true))
-        root.addView(space(0, 10))
-        val value = label(valueText(), 14, Tok.text72)
-        backdropValue = value
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20), 0, dp(20), 0)
-            plate(12)
-            contentDescription = getString(R.string.backdrop_title)
-            setOnClickListener {
-                Prefs.setBackdrop(this@SettingsActivity, !Prefs.backdrop(this@SettingsActivity))
-                backdropValue.text = valueText()
-            }
-        }
-        val title = label(getString(R.string.backdrop_title), 16, bold = true)
-        row.addView(title, lp(0, -2, 1f))
-        row.addView(value)
-        row.flipTexts(listOf(title, value))
-        root.addView(row, lp(dp(520), dp(56)))
-        root.addView(space(0, 6))
-        root.addView(label(getString(R.string.backdrop_hint), 13, Tok.text56))
-
-        root.addView(space(0, 28))
-        root.addView(label(getString(R.string.system), 16, Tok.text72, bold = true))
-        root.addView(space(0, 10))
-        val system = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf(
-            getString(R.string.android_settings) to { apps.settings() },
-            getString(R.string.wifi) to { apps.wifi() },
-            getString(R.string.bluetooth) to { apps.bluetooth() },
-            getString(R.string.vpn) to { apps.vpnSettings() },
-        ).forEach { (name, go) ->
-            system.addView(chip(name) { go() }, lp(dp(160), dp(48)).apply { rightMargin = dp(12) })
-        }
-        root.addView(system)
-
-        root.addView(space(0, 28))
-        root.addView(label(getString(R.string.permissions), 16, Tok.text72, bold = true))
-        root.addView(space(0, 10))
-        permRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        root.addView(permRow)
-        root.addView(space(0, 6))
-        root.addView(label(getString(R.string.permissions_hint), 13, Tok.text56))
-
-        root.addView(space(0, 28))
-        root.addView(label(getString(R.string.stock_launcher), 16, Tok.text72, bold = true))
-        root.addView(space(0, 10))
-        val rollback = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        rollback.addView(chip(getString(R.string.stock_launcher)) { apps.restoreStockHome() }, lp(dp(200), dp(48)).apply { rightMargin = dp(12) })
-        rollback.addView(chip(getString(R.string.choose_launcher)) { apps.homeSettings() }, lp(dp(200), dp(48)))
-        root.addView(rollback)
-        root.addView(space(0, 6))
-        root.addView(label(getString(R.string.launcher_hint), 13, Tok.text56))
-        setContentView(android.widget.ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#0f161b")); isVerticalScrollBarEnabled = false; addView(root)
-        })
-        row.requestFocus()
+        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(list) }, lp(0, -1, 1f))
+        setContentView(root)
+        render()
     }
 
-    override fun onResume() { super.onResume(); renderPermissions() }
+    override fun onResume() { super.onResume(); render() }
 
     @Deprecated("Deprecated in Java")
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) { renderPermissions() }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) { render() }
 
-    /** Three grants the launcher can use; each chip shows the state and asks (or opens the system screen) on OK. */
-    private fun renderPermissions() {
-        permRow.removeAllViews()
+    /** Rebuilds the column; keeps focus on the same row so toggling does not jump to the top. */
+    private fun render() {
+        val keep = list.focusedChild?.let { list.indexOfChild(it) }?.takeIf { it >= 0 } ?: focusIndex
+        list.removeAllViews()
+
+        section(getString(R.string.system), first = true)
+        row(getString(R.string.android_settings), null, null) { apps.settings() }
+
+        section(getString(R.string.home_section))
+        row(getString(R.string.backdrop_title), getString(R.string.backdrop_hint), onOff(Prefs.backdrop(this))) {
+            Prefs.setBackdrop(this, !Prefs.backdrop(this)); render()
+        }
+
+        section(getString(R.string.sec_notifications))
+        row(getString(R.string.notice_access), null, onOff(NotificationFeed.hasAccess(this))) { apps.notificationAccess() }
+        row(getString(R.string.ongoing_title), getString(R.string.ongoing_hint),
+            getString(if (Prefs.hideOngoing(this)) R.string.ongoing_hidden else R.string.ongoing_shown)) {
+            Prefs.setHideOngoing(this, !Prefs.hideOngoing(this)); render()
+        }
+        val n = Prefs.hiddenNotices(this).size
+        if (n > 0) row(getString(R.string.ongoing_reset), null, n.toString()) { Prefs.clearHiddenNotices(this); render() }
+
+        section(getString(R.string.permissions))
+        row(getString(R.string.perm_usage), null, onOff(apps.hasUsageAccess())) { apps.usageAccessSettings() }
         val listings = "android.permission.READ_TV_LISTINGS"
-        val items = listOf(
-            R.string.perm_notifications to (NotificationFeed.hasAccess(this) to { apps.notificationAccess(); Unit }),
-            R.string.perm_usage to (usageGranted() to { apps.usageAccessSettings(); Unit }),
-            R.string.perm_listings to ((checkSelfPermission(listings) == android.content.pm.PackageManager.PERMISSION_GRANTED) to
-                { runCatching { requestPermissions(arrayOf(listings), 2) }; Unit }),
-        )
-        items.forEach { (name, st) ->
-            val (ok, go) = st
-            val label = getString(name) + " · " + getString(if (ok) R.string.on else R.string.off)
-            permRow.addView(chip(label, dp(230)) { go() }, lp(dp(230), dp(48)).apply { rightMargin = dp(12) })
+        row(getString(R.string.perm_listings), null,
+            onOff(checkSelfPermission(listings) == android.content.pm.PackageManager.PERMISSION_GRANTED)) {
+            runCatching { requestPermissions(arrayOf(listings), 2) }
+        }
+
+        section(getString(R.string.channels_title))
+        row(getString(R.string.channels_title), getString(R.string.channels_hint), null) {
+            startActivity(android.content.Intent(this, ChannelsActivity::class.java))
+        }
+
+        section(getString(R.string.updates_title))
+        row(getString(R.string.updates_title), Prefs.updateFound(this)?.let { getString(R.string.updates_available, it) },
+            BuildConfig.VERSION_NAME) { startActivity(android.content.Intent(this, UpdatesActivity::class.java)) }
+
+        section(getString(R.string.sec_search))
+        row(getString(R.string.search_where), apps.searchTarget() ?: getString(R.string.search_none), null) { apps.search() }
+        diagnostics()
+
+        section(getString(R.string.stock_launcher))
+        row(getString(R.string.stock_launcher), getString(R.string.launcher_hint), null) { apps.restoreStockHome() }
+        row(getString(R.string.choose_launcher), null, null) { apps.homeSettings() }
+
+        list.addView(space(0, 24))
+        val target = list.getChildAt(keep.coerceIn(0, list.childCount - 1))
+        (if (target?.isFocusable == true) target else list.children().firstOrNull { it.isFocusable })?.requestFocus()
+    }
+
+    /** One row showing what the TV provider hands this app: package → number of rows. OK reads again. */
+    private fun diagnostics() {
+        val hint = label(getString(R.string.diag_loading), 12, Tok.text56).apply { maxLines = 3 }
+        val v = row(getString(R.string.diag_title), null, null, sub = hint) { render() }
+        Thread {
+            val src = WatchNextSource(this)
+            val rows = src.load()
+            val shown = app.bluebox.home.logic.EntryRules.select(rows, System.currentTimeMillis()).groupBy { it.sourcePackage ?: "?" }
+            // "package: on the shelf / shown on Home"
+            val byPkg = rows.groupBy { it.sourcePackage ?: "?" }.map { (p, r) -> "$p: ${r.size}/${shown[p]?.size ?: 0}" }
+            val text = when {
+                src.lastError != null -> src.lastError!!
+                rows.isEmpty() -> "Строк нет"
+                else -> "Строк ${rows.size} · " + byPkg.joinToString(", ")
+            } + "\n" + channelsText() + "\n" + getString(R.string.diag_hint)
+            runOnUiThread { if (!isDestroyed) hint.text = text }
+        }.start()
+        v.contentDescription = getString(R.string.diag_title)
+    }
+
+    /** "Свои строки приложений: pkg «имя» N, …" or the reason there are none. Runs off the UI thread. */
+    private fun channelsText(): String {
+        val src = app.bluebox.home.data.ChannelSource(this)
+        val ch = src.load()
+        return when {
+            src.lastError != null -> "Свои строки: " + src.lastError
+            ch.isEmpty() -> "Свои строки приложений: нет"
+            else -> "Свои строки: " + ch.joinToString(", ") { "${it.packageName} «${it.name}» ${it.entries.size}" }
         }
     }
 
-    private fun usageGranted(): Boolean = runCatching {
-        val ops = getSystemService(android.app.AppOpsManager::class.java)
-        ops.unsafeCheckOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), packageName) == android.app.AppOpsManager.MODE_ALLOWED
-    }.getOrDefault(false)
+    private fun onOff(on: Boolean) = getString(if (on) R.string.on else R.string.off)
 
-    private fun valueText() = getString(if (Prefs.backdrop(this)) R.string.on else R.string.off)
-
-    private fun chip(text: String, width: Int = dp(160), onClick: () -> Unit): View {
-        val t = label(text, 14, bold = true)
-        val c = centered(t, width, dp(48)).apply { plate(12); setOnClickListener { onClick() } }
-        c.flipTexts(listOf(t))
-        return c
+    private fun section(title: String, first: Boolean = false) {
+        if (!first) list.addView(space(0, 22))
+        list.addView(label(title.uppercase(), 12, Tok.accentSoft, bold = true).apply { setPadding(dp(4), 0, 0, dp(8)) })
     }
+
+    /** Full-width row: name (+ hint) on the left, value or chevron on the right. Returns the row. */
+    private fun row(title: String, hint: String?, value: String?, sub: TextView? = null, onClick: () -> Unit): View {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+            minimumHeight = dp(56)
+            plate(10)
+            setOnClickListener { focusIndex = list.indexOfChild(this); onClick() }
+        }
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val t = label(title, 16, bold = true)
+        col.addView(t)
+        val subs = ArrayList<TextView>()
+        (sub ?: hint?.let { label(it, 12, Tok.text56).apply { maxLines = 3 } })?.let { s ->
+            col.addView(space(0, 3)); col.addView(s); subs += s
+        }
+        box.addView(col, lp(0, -2, 1f))
+        val right = label(value ?: "›", if (value != null) 14 else 22, Tok.text72, bold = value != null)
+        box.addView(right)
+        box.flipTexts(listOf(t, right), subs)
+        list.addView(box, lp(-1, -2).apply { bottomMargin = dp(6) })
+        return box
+    }
+
+    private fun LinearLayout.children(): List<View> = (0 until childCount).map { getChildAt(it) }
 }

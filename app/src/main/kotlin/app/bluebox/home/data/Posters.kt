@@ -33,10 +33,39 @@ class Posters(private val context: Context, cacheSize: Int = 24) {
 
     private fun open(uri: String): java.io.InputStream? {
         val u = Uri.parse(uri)
-        return if (u.scheme == "http" || u.scheme == "https") {
-            (URL(uri).openConnection() as HttpURLConnection).apply { connectTimeout = 5000; readTimeout = 8000 }.inputStream
-        } else context.contentResolver.openInputStream(u)
+        return if (u.scheme == "http" || u.scheme == "https") fromDisk(uri) else context.contentResolver.openInputStream(u)
     }
+
+    /**
+     * Pictures of https cards are kept as files in the cache folder (the system may clear it): the same URL is downloaded once,
+     * not on every return to Home, and one decode no longer fetches the file twice (bounds, then pixels).
+     */
+    private fun fromDisk(uri: String): java.io.InputStream {
+        val dir = java.io.File(context.cacheDir, "posters").apply { mkdirs() }
+        val name = java.security.MessageDigest.getInstance("SHA-1").digest(uri.toByteArray()).joinToString("") { "%02x".format(it) }
+        val file = java.io.File(dir, name)
+        if (file.length() > 0) { file.setLastModified(System.currentTimeMillis()); return file.inputStream() }
+        val tmp = java.io.File(dir, "$name.${Thread.currentThread().id}.tmp")
+        (URL(uri).openConnection() as HttpURLConnection).apply { connectTimeout = 5000; readTimeout = 8000 }.inputStream.use { i ->
+            tmp.outputStream().use { o -> i.copyTo(o) }
+        }
+        if (!tmp.renameTo(file)) { tmp.delete(); throw java.io.IOException("cache rename failed") }
+        trim(dir)
+        return file.inputStream()
+    }
+
+    /** Keeps the folder under [MAX_DISK] bytes, dropping the least recently used files first. */
+    private fun trim(dir: java.io.File) {
+        val files = dir.listFiles()?.filter { it.isFile } ?: return
+        var total = files.sumOf { it.length() }
+        if (total <= MAX_DISK) return
+        for (f in files.sortedBy { it.lastModified() }) {
+            if (total <= MAX_DISK * 3 / 4) break
+            total -= f.length(); f.delete()
+        }
+    }
+
+    private companion object { const val MAX_DISK = 64L * 1024 * 1024 }
 
     private fun decode(uri: String, reqW: Int, reqH: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

@@ -1,12 +1,15 @@
 ﻿# Dot-source: . scripts/env.ps1
 # Sets JAVA_HOME / ANDROID_HOME / GRADLE_USER_HOME / GRADLE_RO_DEP_CACHE / PATH for the local toolchain.
-# Toolchain location: $env:BLUEBOX_TOOLS (default D:\Ani\.gradle\codex-tools; only read).
-# Gradle home (writable, OUTSIDE the repo and OUTSIDE the D:\Ani fork): $env:BLUEBOX_GRADLE_HOME (default D:\AI\.bluebox-gradle).
-# Read-only dependency cache: $env:BLUEBOX_GRADLE_RO_CACHE (default D:\Ani\.gradle\caches) -> GRADLE_RO_DEP_CACHE.
+# Personal settings (not in the repo): optional file $HOME\.bluebox-home.ps1, dot-sourced first; it may set $env:BLUEBOX_TOOLS, BLUEBOX_GRADLE_HOME, BLUEBOX_GRADLE_RO_CACHE, BLUEBOX_TV.
+# Toolchain location: $env:BLUEBOX_TOOLS (default <repo>\.tools; only read).
+# Gradle home (writable, outside the repo): $env:BLUEBOX_GRADLE_HOME (default $HOME\.bluebox-gradle).
+# Read-only dependency cache (optional): $env:BLUEBOX_GRADLE_RO_CACHE -> GRADLE_RO_DEP_CACHE.
 # Environment problems THROW "ПРОБЛЕМА ОКРУЖЕНИЯ: ..." (never exit: this file is dot-sourced). Callers catch and exit 2.
 
 $bbRoot = Split-Path -Parent $PSScriptRoot
-$bbTools = if ($env:BLUEBOX_TOOLS) { $env:BLUEBOX_TOOLS } else { 'D:\Ani\.gradle\codex-tools' }
+$bbLocal = Join-Path $HOME '.bluebox-home.ps1'
+if (Test-Path $bbLocal) { . $bbLocal }
+$bbTools = if ($env:BLUEBOX_TOOLS) { $env:BLUEBOX_TOOLS } else { Join-Path $bbRoot '.tools' }
 
 function Stop-EnvProblem([string]$msg) {
     throw "ПРОБЛЕМА ОКРУЖЕНИЯ: $msg"
@@ -23,14 +26,14 @@ $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
 $env:ANDROID_USER_HOME = Join-Path $bbTools 'android-user-home'
 $env:ANDROID_AVD_HOME = Join-Path $env:ANDROID_USER_HOME 'avd'
 
-$env:GRADLE_USER_HOME = if ($env:BLUEBOX_GRADLE_HOME) { $env:BLUEBOX_GRADLE_HOME } else { 'D:\AI\.bluebox-gradle' }
+$env:GRADLE_USER_HOME = if ($env:BLUEBOX_GRADLE_HOME) { $env:BLUEBOX_GRADLE_HOME } else { Join-Path $HOME '.bluebox-gradle' }
 if (-not (Test-Path $env:GRADLE_USER_HOME)) {
     try { New-Item -ItemType Directory -Force $env:GRADLE_USER_HOME -ErrorAction Stop | Out-Null }
     catch { Stop-EnvProblem "не удалось создать каталог Gradle: $env:GRADLE_USER_HOME ($($_.Exception.Message))" }
 }
 # Read-only dependency cache (the fork's Gradle cache): Gradle only reads it, never writes.
-$roCache = if ($env:BLUEBOX_GRADLE_RO_CACHE) { $env:BLUEBOX_GRADLE_RO_CACHE } else { 'D:\Ani\.gradle\caches' }
-if (Test-Path (Join-Path $roCache 'modules-2')) { $env:GRADLE_RO_DEP_CACHE = $roCache } else { Remove-Item Env:\GRADLE_RO_DEP_CACHE -ErrorAction SilentlyContinue }
+$roCache = if ($env:BLUEBOX_GRADLE_RO_CACHE) { $env:BLUEBOX_GRADLE_RO_CACHE } else { '' }
+if ($roCache -and (Test-Path (Join-Path $roCache 'modules-2'))) { $env:GRADLE_RO_DEP_CACHE = $roCache } else { Remove-Item Env:\GRADLE_RO_DEP_CACHE -ErrorAction SilentlyContinue }
 
 # Java ignores HTTP(S)_PROXY env vars: hand a local proxy to Gradle/wrapper once via <gradle home>/gradle.properties.
 $bbGradleProps = Join-Path $env:GRADLE_USER_HOME 'gradle.properties'

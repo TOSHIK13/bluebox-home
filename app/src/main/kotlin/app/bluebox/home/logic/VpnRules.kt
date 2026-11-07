@@ -18,4 +18,22 @@ object VpnRules {
         unvalidatedForMs >= CONNECT_GRACE_MS -> VpnState.Error
         else -> VpnState.Connecting
     }
+
+    /** "1:05:09" / "05:09". */
+    fun duration(ms: Long): String {
+        val s = (ms.coerceAtLeast(0) / 1000)
+        val h = s / 3600; val m = s % 3600 / 60; val sec = s % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%02d:%02d".format(m, sec)
+    }
+
+    /** Traffic in Russian units: "0 Б", "512 КБ", "1,2 МБ", "3,45 ГБ". */
+    fun bytes(b: Long): String {
+        val v = b.coerceAtLeast(0).toDouble()
+        return when {
+            v < 1024 -> "${v.toLong()} Б"
+            v < 1024 * 1024 -> "%d КБ".format((v / 1024).toLong())
+            v < 1024.0 * 1024 * 1024 -> "%.1f МБ".format(java.util.Locale("ru"), v / (1024 * 1024))
+            else -> "%.2f ГБ".format(java.util.Locale("ru"), v / (1024.0 * 1024 * 1024))
+        }
+    }
 }

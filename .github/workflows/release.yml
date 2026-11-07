@@ -1,0 +1,54 @@
+name: release
+
+# Tag v0.2.1 -> signed APK + checksum + GitHub Release. A tag with a suffix (v0.3.0-beta.1) is a pre-release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Version from tag
+        id: ver
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          name="${tag#v}"
+          base="${name%%-*}"
+          IFS=. read -r major minor patch <<< "$base"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$((major * 10000 + minor * 100 + patch))" >> "$GITHUB_OUTPUT"
+          case "$name" in *-*) echo "pre=true" >> "$GITHUB_OUTPUT";; *) echo "pre=false" >> "$GITHUB_OUTPUT";; esac
+      - name: Keystore
+        run: echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Test and build
+        env:
+          HOME_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          HOME_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          HOME_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          HOME_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease \
+            -PversionName=${{ steps.ver.outputs.name }} -PversionCode=${{ steps.ver.outputs.code }} \
+            -PupdateRepo=${{ github.repository }}
+      - name: Collect files
+        run: |
+          out="bluebox-home-${{ steps.ver.outputs.name }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$out"
+          sha256sum "$out" > "$out.sha256"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out="bluebox-home-${{ steps.ver.outputs.name }}.apk"
+          flags=""
+          if [ "${{ steps.ver.outputs.pre }}" = "true" ]; then flags="--prerelease"; fi
+          gh release create "${GITHUB_REF_NAME}" "$out" "$out.sha256" --generate-notes $flags

@@ -69,7 +69,7 @@ UI probes (debug build only; keys = ProbeKeys in ui/components/Probe.kt, table c
                                  overlay, ready, rows, screen, items), e.g. expect-ui sheet=sheet:score, expect-ui screen=detail:ready
   wait-ui <field>=<regex> [sec=15]   the same with a longer wait - instead of wait-for "<title>" while a screen loads
 
-Safety: default device auto (emulator pool), `emu` = emulator-5554. Any non-emulator serial (-Device tv = 192.168.1.151:5555) needs -AllowRealTv,
+Safety: default device auto (emulator pool), `emu` = emulator-5554. Any non-emulator serial (-Device tv = $env:BLUEBOX_TV, host:port of the real box) needs -AllowRealTv,
 install there is allowed only for -Variant beta, and scenario / reset-app / proxy / emu / adb other than getprop|dumpsys are refused.
 Every adb call carries an explicit -s <serial>. pm clear is only ever run for our own package.
 Package: app.bluebox.tv.debug (default) | app.bluebox.tv.beta. Screenshots go to -Out (default %TEMP%\bluebox-shots\<worktree folder name>).
@@ -110,7 +110,7 @@ $appId = 'app.bluebox.home'
 $suffix = if ($Variant -eq 'beta') { '.beta' } else { '.debug' }
 $pkg = "$appId$suffix"
 $activity = "$pkg/$appId.HomeActivity"
-$serial = switch ($Device) { 'emu' { 'emulator-5554' } 'tv' { '192.168.1.151:5555' } default { $Device } }
+$serial = switch ($Device) { 'emu' { 'emulator-5554' } 'tv' { if (-not $env:BLUEBOX_TV) { throw 'BLUEBOX_TV (host:port of the TV) is not set: put it into $HOME\.bluebox-home.ps1' }; $env:BLUEBOX_TV } default { $Device } }
 $isEmulator = $serial -match '^(emulator-\d+|auto)$'   # 'auto' is resolved to a leased emulator before the command runs
 $adbExe = Join-Path $env:ANDROID_HOME 'platform-tools\adb.exe'
 function Get-StateFile { Join-Path $env:TEMP ("bluebox-tv-start-" + ($serial -replace '[^\w\.-]', '_') + ".txt") }
@@ -903,6 +903,14 @@ function Invoke-OneCore([string]$cmd, [string[]]$t) {
         'home-shot' { Take-Shot 'hs'; AdbShell 'dumpsys package app.bluebox.home.debug | grep READ_TV_LISTINGS' }
         'start-home' { AdbQuiet shell am start -n app.bluebox.home.debug/app.bluebox.home.HomeActivity; 'home started' }
         'stop-home' { AdbQuiet shell am force-stop app.bluebox.home.debug; 'home stopped' }
+        # signed release of Home (applicationId app.bluebox.home) for the real TV (owner: «Да, ставь на ТВ», 2026-11-08): `install -r` only,
+        # never a downgrade; the launcher is started explicitly and does not become the default Home by itself.
+        'install-release' {
+            $relApk = Join-Path $repo 'app' | Join-Path -ChildPath 'build/outputs/apk/release/app-release.apk'
+            if (-not (Test-Path $relApk)) { throw "no APK: build it first (gradlew :app:assembleRelease): $relApk" }
+            AdbQuiet install -r $relApk; "installed: $relApk -> $serial"
+        }
+        'start-release' { AdbQuiet shell am start -n app.bluebox.home/.HomeActivity; 'release home started' }
         'start' { Launch-App; 'started' }
         'stop' { AdbQuiet shell am force-stop $pkg; 'stopped' }
         'restart' { AdbQuiet shell am force-stop $pkg; Launch-App; 'restarted' }
@@ -990,7 +998,7 @@ function Split-Line([string]$line) {
 
 # command -> minimum number of arguments (for -DryRun validation)
 $knownCommands = @{
-    'devices' = 0; 'emu' = 0; 'build' = 0; 'install' = 0; 'install-home' = 0; 'home-tour' = 0; 'home-grant' = 0; 'home-listings' = 0; 'home-shot' = 0; 'start-home' = 0; 'stop-home' = 0; 'start' = 0; 'stop' = 0; 'restart' = 0; 'reset-app' = 0; 'start-time' = 0
+    'devices' = 0; 'emu' = 0; 'build' = 0; 'install' = 0; 'install-home' = 0; 'home-tour' = 0; 'home-grant' = 0; 'home-listings' = 0; 'home-shot' = 0; 'start-home' = 0; 'stop-home' = 0; 'install-release' = 0; 'start-release' = 0; 'start' = 0; 'stop' = 0; 'restart' = 0; 'reset-app' = 0; 'start-time' = 0
     'keys' = 1; 'tap' = 2; 'tap-text' = 1; 'swipe' = 4; 'text' = 1; 'wait' = 1; 'shot' = 0; 'focus' = 0; 'log' = 0; 'deeplink' = 1; 'proxy' = 1; 'adb' = 1
     'expect-focus' = 1; 'expect-text' = 1; 'expect-no-text' = 1; 'wait-for' = 1; 'expect-alive' = 0; 'expect-no-crash' = 0; 'expect-playing' = 0
     'expect-query' = 2; 'expect-prop' = 2

@@ -66,7 +66,23 @@ class Apps(private val context: Context) {
     fun settings() = system(Settings.ACTION_SETTINGS)
     fun vpnSettings() = system(Settings.ACTION_VPN_SETTINGS)
     fun wifi() = system(Settings.ACTION_WIFI_SETTINGS)
-    fun bluetooth() = system(Settings.ACTION_BLUETOOTH_SETTINGS)
+    /** Google TV often has no handler for the stock action: try the TV settings accessory screen, then the main settings. */
+    fun bluetooth(): Boolean {
+        val tv = "com.android.tv.settings"
+        val tries = listOf(
+            Intent(Settings.ACTION_BLUETOOTH_SETTINGS),
+            Intent().setClassName(tv, "$tv.accessories.AddAccessoryActivity"),
+            Intent().setClassName(tv, "$tv.accessories.BluetoothAccessoryActivity"),
+            Intent().setClassName(tv, "$tv.accessories.AccessoriesActivity"),
+            Intent().setClassName(tv, "$tv.connectivity.BluetoothActivity"),
+            Intent("com.android.tv.settings.action.ACCESSORIES").setPackage(tv),
+            Intent("android.settings.BLUETOOTH_SETTINGS"),
+        )
+        for (i in tries) {
+            if (runCatching { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) return true
+        }
+        return settings()
+    }
     fun screensaver() = system(Settings.ACTION_DREAM_SETTINGS)
     fun accessibility() = system(Settings.ACTION_ACCESSIBILITY_SETTINGS)
     fun notificationAccess() = system("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
@@ -97,10 +113,28 @@ class Apps(private val context: Context) {
     fun homeSettings(): Boolean =
         start(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), "home settings")
 
-    /** Search goes to Blue Box by default (decisions: M6-H1); falls back to the system search. */
+    /** System-wide search (Google TV search / Assistant) covers every app that supports it, not just Blue Box. */
     fun search(): Boolean {
-        val bb = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("bluebox://search")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        return if (bb.resolveActivity(pm) != null) start(bb, "bluebox://search") else system(Intent.ACTION_ASSIST)
+        val i = searchIntent() ?: return fail(context.getString(R.string.search))
+        return start(i, "search")
+    }
+
+    /** The first system search action that has a handler, as a ready intent targeted at that handler. */
+    fun searchIntent(): Intent? {
+        for (a in listOf("android.search.action.GLOBAL_SEARCH", Intent.ACTION_ASSIST, Intent.ACTION_SEARCH_LONG_PRESS)) {
+            val ri = pm.resolveActivity(Intent(a), PackageManager.MATCH_DEFAULT_ONLY) ?: continue
+            val ai = ri.activityInfo ?: continue
+            return Intent(a).setClassName(ai.packageName, ai.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return null
+    }
+
+    /** Human description of where [search] goes, e.g. "Google · GLOBAL_SEARCH"; null when nothing handles it. */
+    fun searchTarget(): String? {
+        val i = searchIntent() ?: return null
+        val c = i.component ?: return null
+        val label = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(c.packageName, 0)).toString() }.getOrDefault(c.packageName)
+        return "$label (${c.packageName}) · ${i.action?.substringAfterLast('.')}"
     }
 
     private fun system(action: String): Boolean = start(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), action)
