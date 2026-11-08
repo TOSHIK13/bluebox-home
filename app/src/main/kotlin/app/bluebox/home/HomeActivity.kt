@@ -55,11 +55,15 @@ class HomeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        backdrops = Posters(this, cacheSize = 3)
+        runCatching {
+            for (u in listOf(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI, android.media.tv.TvContract.PreviewPrograms.CONTENT_URI, android.media.tv.TvContract.Channels.CONTENT_URI))
+                contentResolver.registerContentObserver(u, true, observer)
+        }
+        backdrops = Posters(this, maxCacheKb = 6 * 1024)
         apps = Apps(this)
         watchNext = WatchNextSource(this)
         channelSource = ChannelSource(this)
-        posters = Posters(this, cacheSize = 120)
+        posters = Posters(this, maxCacheKb = (Runtime.getRuntime().maxMemory() / 8 / 1024).toInt().coerceIn(4 * 1024, 32 * 1024))
         vpn = VpnMonitor(this, ::showVpn)
         setContentView(buildUi())
     }
@@ -87,23 +91,41 @@ class HomeActivity : Activity() {
         }
     }
 
+    private val dataChanged = java.util.concurrent.atomic.AtomicBoolean(true) // set by the provider's change notification
+    private var loadedAt = 0L
+    private var lastLoadEmpty = true
+    @Volatile private var lastRows: List<WatchEntry> = emptyList()
+    @Volatile private var lastChannels: List<ChannelRow> = emptyList()
+    private val observer = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) { dataChanged.set(true) }
+    }
+
     override fun onResume() {
         super.onResume()
         askPermissions()
         vpn.start()
-        Thread { runCatching { app.bluebox.home.data.UpdateCheck.maybe(applicationContext) } }.start()
+        Thread { runCatching { app.bluebox.home.data.UpdateCheck.maybe(applicationContext) } }.start() // not on io: a slow network must not delay the cards
+        // coming back from an app usually changes nothing: read the provider again only when it said so (or once a minute, as a net)
+        val stale = android.os.SystemClock.elapsedRealtime() - loadedAt > 60_000L
+        val reload = dataChanged.getAndSet(false) || stale || lastLoadEmpty || !cardsBuilt
+        if (reload) loadedAt = android.os.SystemClock.elapsedRealtime()
         // a failure here must never take the launcher process down (it would restart in a loop)
         runCatching {
             io.execute {
                 runCatching {
-                    val rows = EntryRules.select(watchNext.load().filter { it.sourcePackage !in Prefs.hiddenWatchApps(this) }, System.currentTimeMillis())
-                    val channels = ChannelRules.visible(
-                        ChannelRules.arrange(channelSource.load().filter { debuggable || !it.packageName.startsWith("app.bluebox.home") }, Prefs.channelOrder(this)),
-                        Prefs.hiddenChannels(this),
-                    ).filter { it.entries.isNotEmpty() }
+                    if (reload) {
+                        lastRows = EntryRules.select(watchNext.load().filter { it.sourcePackage !in Prefs.hiddenWatchApps(this) }, System.currentTimeMillis())
+                        lastChannels = ChannelRules.visible(
+                            ChannelRules.arrange(channelSource.load().filter { debuggable || !it.packageName.startsWith("app.bluebox.home") }, Prefs.channelOrder(this)),
+                            Prefs.hiddenChannels(this),
+                        ).filter { it.entries.isNotEmpty() }
+                    }
+                    val rows = lastRows; val channels = lastChannels
                     val installed = apps.installed()
                     val recent = apps.recent()
-                    runOnUiThread { if (!isDestroyed) refresh(rows, channels, installed, recent) }
+                    channels.forEach { labels.getOrPut(it.packageName) { appLabel(it.packageName) } }
+                    installed.forEach { a -> if (!icons.containsKey(a.packageName)) apps.icon(a.packageName)?.let { icons[a.packageName] = it } }
+                    runOnUiThread { lastLoadEmpty = rows.isEmpty() && channels.isEmpty(); if (!isDestroyed) refresh(rows, channels, installed, recent) }
                 }
             }
         }
@@ -113,7 +135,9 @@ class HomeActivity : Activity() {
     private fun refresh(rows: List<WatchEntry>, channels: List<ChannelRow>, installed: List<AppEntry>, recent: List<String>) {
         // coming back from Settings or the quick panel usually brings the same data: rebuild only what really changed
         // (a rebuild resets the shelves' scroll and animation state and reloads every picture)
-        val cardsKey = listOf(rows, channels)
+        // the playback position and "last watched" time change on every play: only the shown percentage counts, not the raw numbers
+        fun shape(e: WatchEntry) = e.copy(positionMs = EntryRules.progressPct(e).toLong(), lastEngagementMs = 0L)
+        val cardsKey = listOf(rows.map(::shape), channels.map { c -> c.copy(entries = c.entries.map(::shape)) })
         val dockKey = listOf(installed, recent, Prefs.dock(this))
         val cardsSame = cardsKey == lastCardsKey && cardsBuilt
         val dockSame = dockKey == lastDockKey
@@ -136,6 +160,7 @@ class HomeActivity : Activity() {
     override fun onPause() { vpn.stop(); super.onPause() }
 
     override fun onDestroy() {
+        runCatching { contentResolver.unregisterContentObserver(observer) }
         backdropHandler.removeCallbacksAndMessages(null)
         io.shutdownNow(); posters.shutdown(); backdrops.shutdown(); super.onDestroy()
     }
@@ -253,7 +278,6 @@ class HomeActivity : Activity() {
         dockExpanded = on
         dockPanel.layoutParams = dockPanel.layoutParams.apply { width = dp(if (on) 240 else 72) }
         dockPanel.setBackgroundColor(Color.argb(if (on) 209 else 115, 10, 14, 18))
-        dockPanel.elevation = if (on) dp(8).toFloat() else 0f
         content.alpha = if (on) 0.7f else 1f // as in A3: the content stays in place, slightly dimmed
         dockLabels.forEach { it.visibility = if (on) View.VISIBLE else View.GONE }
     }
@@ -264,6 +288,20 @@ class HomeActivity : Activity() {
         super.onStart()
         if (!backdropOn()) hideBackdrop()
     }
+
+    override fun onStop() {
+        backdropHandler.removeCallbacksAndMessages(null)
+        backdrops.evictAll() // a backdrop is ~1 MB: nothing to keep while another app is on screen
+        super.onStop()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) { posters.evictAll(); backdrops.evictAll() }
+    }
+
+    private var wantedBackdrop: String? = null // what the focused card asks for now: an older answer must not replace it
+    private var shownBackdrop: String? = null
 
     private fun anyCardFocused() = blocks.any { it.cards.focusedChild != null }
 
@@ -277,9 +315,12 @@ class HomeActivity : Activity() {
         b.title.text = e.title
         if (!backdropOn()) return
         val uri = BackdropRules.pick(e) ?: return
+        wantedBackdrop = uri
+        if (uri == shownBackdrop) return // the same picture is already on screen
         backdropHandler.postDelayed({
             backdrops.load(uri, 960, 540) { bmp ->
-                if (bmp != null && anyCardFocused() && backdropOn()) {
+                if (bmp != null && uri == wantedBackdrop && anyCardFocused() && backdropOn()) {
+                    shownBackdrop = uri
                     if (bmp.height > bmp.width * 1.1) {
                         // vertical poster: shown whole on the right part of the screen, the rest stays the flat dark background
                         backdrop.visibility = View.GONE; backdropScrim.visibility = View.GONE
@@ -294,6 +335,7 @@ class HomeActivity : Activity() {
     }
 
     private fun hideBackdrop() {
+        wantedBackdrop = null; shownBackdrop = null
         backdrop.visibility = View.GONE; backdropScrim.visibility = View.GONE; backdrop.setImageDrawable(null)
         posterSide.visibility = View.GONE; posterSide.findViewWithTag<ImageView>("poster").setImageDrawable(null)
     }
@@ -327,7 +369,9 @@ class HomeActivity : Activity() {
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
             setShadowLayer(dp(8).toFloat(), 0f, dp(1).toFloat(), Color.argb(130, 0, 0, 0))
         }
-        col.addView(title, lp(-1, -2).apply { topMargin = dp(4); leftMargin = dp(32) })
+        // fixed height: glyphs from fallback fonts (►, quotes) make a line taller, and the shelf must not jump between cards
+        title.gravity = android.view.Gravity.CENTER_VERTICAL; title.includeFontPadding = false
+        col.addView(title, lp(-1, dp(titleSp * 14 / 10)).apply { topMargin = dp(4); leftMargin = dp(32) })
         val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipToPadding = false; setPadding(dp(32), 0, dp(32), 0) }
         val scroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false; isFillViewport = false // clips at its own bounds = the dock's right edge
@@ -369,6 +413,7 @@ class HomeActivity : Activity() {
         if (animate && i == k && target == lastTarget) return
         lastFocused = i; lastTarget = target
         val gen = ++anim
+        loadPictures(i - 1); loadPictures(i); loadPictures(i + 1)
         fades.forEach { it.cancel() }; fades.clear()
         rowsScroll.scrollTo(0, target) // the jump is instant; every shelf is then animated from its old place by hand
         val now = android.os.SystemClock.uptimeMillis()
@@ -382,7 +427,7 @@ class HomeActivity : Activity() {
             val v = x.root
             v.animate().cancel()
             v.animate().setStartDelay(0) // a delay set earlier would otherwise stick to the next run
-            val alpha = when { j == i -> 1f; j == i + 1 -> 0.5f; else -> 0f }
+            val alpha = when { j == i -> 1f; j == i + 1 -> 0f; else -> 0f }
             if (!animate) { v.alpha = alpha; v.translationY = 0f; return@forEachIndexed }
             // the scroll jumped by `shift`: add it to where the shelf is now, so it carries on from the same place on screen
             val from = v.translationY + shift
@@ -403,7 +448,7 @@ class HomeActivity : Activity() {
                 }
                 j == k && j == i + 1 -> { // left downwards and is now the "next" header: settles to the bottom edge, no blinking
                     v.translationY = from
-                    v.animate().translationY(0f).alpha(0.5f).setDuration((280 * k1).toLong()).setInterpolator(enter).withLayer().start()
+                    v.animate().translationY(0f).alpha(0f).setDuration((280 * k1).toLong()).setInterpolator(enter).withLayer().start()
                 }
                 j == k -> { // left downwards, further away
                     v.translationY = from
@@ -412,7 +457,7 @@ class HomeActivity : Activity() {
                 }
                 j == i + 1 -> { // the next shelf shows only its header, a moment after the others
                     v.translationY = 0f
-                    v.animate().alpha(0.5f).setStartDelay((120 * k1).toLong()).setDuration((160 * k1).toLong()).start()
+                    v.alpha = 0f // the shelf below stays invisible: no bits of its text (descenders) peek out at the bottom edge
                 }
                 else -> { v.alpha = 0f; v.translationY = 0f }
             }
@@ -421,6 +466,9 @@ class HomeActivity : Activity() {
 
     /** How much of the previous shelf stays visible above the focused one: just the bottom edge of its cards. */
     private val PEEK_TOP get() = dp(34)
+
+    private val labels = java.util.concurrent.ConcurrentHashMap<String, String>() // filled on the io thread
+    private val icons = java.util.concurrent.ConcurrentHashMap<String, android.graphics.drawable.Drawable>()
 
     private fun appLabel(pkg: String): String =
         runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
@@ -438,7 +486,7 @@ class HomeActivity : Activity() {
         channels.forEach { ch ->
             val portrait = ch.portrait
             val cw = if (portrait) 96 else 168; val chh = if (portrait) 144 else 94
-            val b = makeBlock("${ch.name.ifBlank { ch.packageName }} · ${appLabel(ch.packageName)}", 42, if (portrait) 168 else 116)
+            val b = makeBlock("${ch.name.ifBlank { ch.packageName }} · ${labels[ch.packageName] ?: appLabel(ch.packageName)}", 42, if (portrait) 168 else 116)
             b.root.setPadding(0, dp(10), 0, 0)
             ch.entries.forEach { b.cards.addView(card(it, b, cw, chh), lp(dp(cw), dp(chh)).apply { rightMargin = dp(16); gravity = Gravity.CENTER_VERTICAL }) }
             b.title.text = ch.entries.first().title
@@ -454,7 +502,18 @@ class HomeActivity : Activity() {
         // up from the first row and down from the last stay put (the dock is to the left, never above/below)
         lockEdge(blocks.first(), up = true); lockEdge(blocks.last(), up = false)
         rowsScroll.scrollTo(0, 0); lastFocused = 0; lastTarget = 0
-        blocks.forEachIndexed { j, x -> x.root.translationY = 0f; x.root.alpha = if (j <= 1) (if (j == 0) 1f else 0.5f) else 0f }
+        loadPictures(0); loadPictures(1)
+        blocks.forEachIndexed { j, x -> x.root.translationY = 0f; x.root.alpha = if (j <= 1) (if (j == 0) 1f else 0f) else 0f }
+    }
+
+    /** Starts the picture loads of a shelf, once. Shelves far from the focused one stay empty until the user comes close. */
+    private fun loadPictures(j: Int) {
+        val b = blocks.getOrNull(j) ?: return
+        for (n in 0 until b.cards.childCount) {
+            val v = b.cards.getChildAt(n)
+            (v.tag as? Runnable)?.run()
+            v.tag = null
+        }
     }
 
     private fun lockEdge(b: Block, up: Boolean) {
@@ -507,7 +566,10 @@ class HomeActivity : Activity() {
         val image = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         frame.addView(image, FrameLayout.LayoutParams(-1, -1))
         (e.thumbUri?.takeIf { it.isNotBlank() } ?: e.posterUri?.takeIf { it.isNotBlank() })?.let {
-            posters.load(it, w, h) { bmp -> if (bmp != null) { image.scaleType = ImageView.ScaleType.MATRIX; image.imageMatrix = topCrop(bmp, w, h); image.setImageBitmap(bmp) } }
+            // not loaded yet: only the focused shelf and its neighbours get their pictures (see loadPictures)
+            frame.tag = Runnable {
+                posters.load(it, w, h) { bmp -> if (bmp != null) { image.scaleType = ImageView.ScaleType.MATRIX; image.imageMatrix = topCrop(bmp, w, h); image.setImageBitmap(bmp) } }
+            }
         }
         if (EntryRules.isNew(e)) frame.addView(chip(getString(R.string.badge_new), Tok.accentFill, Gravity.TOP or Gravity.START, 8, 8, 0))
         EntryRules.episodeTag(e)?.let { t ->
@@ -710,7 +772,7 @@ class HomeActivity : Activity() {
             val a = sl.app ?: return@forEachIndexed
             if (shown.size >= room) return@forEachIndexed
             shown += i
-            dockItem(a.label, apps.icon(a.packageName), null, i) { apps.launch(a.packageName) }.tag = "app$i"
+            dockItem(a.label, icons[a.packageName] ?: apps.icon(a.packageName), null, i) { apps.launch(a.packageName) }.tag = "app$i"
         }
         visibleTokens = shown
         if (editing && tokens.size < DockRules.MAX_SLOTS) {
