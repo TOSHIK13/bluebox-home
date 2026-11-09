@@ -15,6 +15,7 @@ import android.widget.TextView
 import app.bluebox.home.data.Apps
 import app.bluebox.home.data.NotificationFeed
 import app.bluebox.home.data.VpnMonitor
+import app.bluebox.home.logic.VpnHealth
 import app.bluebox.home.logic.VpnRules
 import app.bluebox.home.logic.VpnState
 
@@ -85,6 +86,7 @@ class QuickSettingsActivity : Activity() {
     }
 
     override fun onStart() { super.onStart(); vpn.start(); ticker.run() }
+    override fun onDestroy() { probeIo.shutdownNow(); super.onDestroy() }
     override fun onStop() { ticker.stop(); vpn.stop(); NotificationFeed.changed = null; super.onStop() }
 
     override fun onResume() {
@@ -100,6 +102,57 @@ class QuickSettingsActivity : Activity() {
         fun stop() = clock.removeCallbacks(this)
     }
 
+    private lateinit var vpnIcon: ImageView
+    private var cardFocused = false
+    private var health = VpnHealth.Off
+
+    /** The icon carries the status: grey off, yellow connecting, green passing traffic, orange up but silent, red no link. */
+    private fun tintIcon() {
+        val c = when (health) {
+            VpnHealth.Off -> Tok.off
+            VpnHealth.Connecting -> Tok.warn
+            VpnHealth.Working -> Tok.ok
+            VpnHealth.NoTraffic -> Color.parseColor("#ff9d4d")
+            VpnHealth.Error -> Tok.error
+        }
+        vpnIcon.setColorFilter(if (cardFocused) Tok.onPlate else c)
+    }
+
+    private fun openVpnDialog() {
+        // the system VPN notification opens the stock dialog (app, session time, traffic); settings as fallback
+        val sent = NotificationFeed.vpn()?.open?.let { runCatching { it.send() }.isSuccess } ?: false
+        if (!sent) apps.vpnSettings()
+    }
+
+    private fun switchVpn(pkg: String) {
+        val up = lastVpn == VpnState.On || lastVpn == VpnState.Connecting
+        val sent = apps.switchVpn(pkg, up)
+        if (sent) android.widget.Toast.makeText(this, getString(if (up) R.string.vpn_switching_off else R.string.vpn_switching_on), android.widget.Toast.LENGTH_SHORT).show()
+        probeOk = null; probeMs = null; probedAt = 0L
+    }
+
+    // ---- real check through the tunnel (see VpnMonitor.probe), repeated while the panel is open and the VPN is up
+    private var probeOk: Boolean? = null
+    private var probeMs: Long? = null
+    private var probedAt = 0L
+    private var probing = false
+    private val probeIo = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    private fun probeIfDue() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (probing || now - probedAt < PROBE_EVERY_MS) return
+        val net = vpn.tunnel() ?: return
+        probing = true
+        probeIo.execute {
+            val ms = vpn.probe(net)
+            runOnUiThread {
+                probing = false; probedAt = android.os.SystemClock.elapsedRealtime()
+                if (isDestroyed) return@runOnUiThread
+                probeOk = ms != null; probeMs = ms; showVpn(lastVpn)
+            }
+        }
+    }
+
     private lateinit var vpnTitleDot: View
     private lateinit var vpnState: TextView
     private lateinit var vpnStats: LinearLayout
@@ -112,13 +165,16 @@ class QuickSettingsActivity : Activity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(12), dp(16), dp(12))
-            plate(14); contentDescription = getString(R.string.vpn); setOnClickListener {
-                // the system VPN notification opens the stock dialog (app, session time, traffic); settings as fallback
-                val sent = NotificationFeed.vpn()?.open?.let { runCatching { it.send() }.isSuccess } ?: false
-                if (!sent) apps.vpnSettings()
+            plate(14); contentDescription = getString(R.string.vpn)
+            // OK switches the VPN app chosen in Settings; without one (or on long OK) the system VPN dialog opens
+            setOnClickListener {
+                val pkg = Prefs.vpnApp(this@QuickSettingsActivity)
+                if (pkg == null) openVpnDialog() else switchVpn(pkg)
             }
+            setOnLongClickListener { openVpnDialog(); true }
         }
         val img = ImageView(this).apply { setImageResource(R.drawable.ic_vpn); setColorFilter(Tok.text) }
+        vpnIcon = img
         val title = label(getString(R.string.vpn), 14, bold = true)
         vpnState = label("", 12, Tok.text72)
         vpnTitleDot = View(this)
@@ -142,7 +198,8 @@ class QuickSettingsActivity : Activity() {
         card.setOnFocusChangeListener { _, f ->
             val on = if (f) Tok.onPlate else Tok.text
             val dim = if (f) Color.argb(160, 17, 17, 17) else Tok.text72
-            img.setColorFilter(on); title.setTextColor(on); listOf(vpnTime, vpnRx, vpnTx).forEach { it.setTextColor(on) }
+            cardFocused = f; tintIcon()
+            title.setTextColor(on); listOf(vpnTime, vpnRx, vpnTx).forEach { it.setTextColor(on) }
             vpnState.setTextColor(dim); caps.forEach { it.setTextColor(dim) }
         }
         return card
@@ -212,9 +269,18 @@ class QuickSettingsActivity : Activity() {
             VpnState.Connecting -> Tok.warn to R.string.vpn_connecting
             VpnState.Error -> Tok.error to R.string.vpn_error
         }
-        vpnTitleDot.background = rounded(color, dp(5).toFloat())
+        if (s != VpnState.On) { probeOk = null; probeMs = null; probedAt = 0L } else probeIfDue()
         val vpnApp = if (s == VpnState.On) NotificationFeed.vpnApp() else null
-        vpnState.text = getString(textRes) + (vpnApp?.let { " · $it" } ?: "")
+        health = VpnRules.health(s, probeOk)
+        val probeText = when {
+            s != VpnState.On -> ""
+            probeOk == false -> " · " + getString(R.string.vpn_no_traffic)
+            probeMs != null -> " · $probeMs мс"
+            else -> ""
+        }
+        vpnState.text = getString(textRes) + (vpnApp?.let { " · $it" } ?: "") + probeText
+        vpnTitleDot.background = rounded(if (health == VpnHealth.NoTraffic) Color.parseColor("#ff9d4d") else color, dp(5).toFloat())
+        tintIcon()
         val info = if (s == VpnState.On) vpn.info(NotificationFeed.vpn()?.postTime ?: 0L) else null
         vpnStats.visibility = if (info != null) View.VISIBLE else View.GONE
         if (info != null) {
@@ -265,4 +331,6 @@ class QuickSettingsActivity : Activity() {
         }
         return row
     }
+
+    private companion object { const val PROBE_EVERY_MS = 15_000L }
 }

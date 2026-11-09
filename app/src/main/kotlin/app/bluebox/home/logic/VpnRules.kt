@@ -2,6 +2,9 @@ package app.bluebox.home.logic
 
 enum class VpnState { On, Off, Connecting, Error }
 
+/** Off / connecting / working (traffic passes) / up but nothing passes / no connection. */
+enum class VpnHealth { Off, Connecting, Working, NoTraffic, Error }
+
 /** What ConnectivityManager says about VPN, reduced to a state for the pill. */
 object VpnRules {
     /** A VPN network that is still not validated after this long is shown as "no connection" instead of "connecting". */
@@ -17,6 +20,17 @@ object VpnRules {
         validated -> VpnState.On
         unvalidatedForMs >= CONNECT_GRACE_MS -> VpnState.Error
         else -> VpnState.Connecting
+    }
+
+    /**
+     * What the icon shows: the tunnel state refined by a real probe through it.
+     * @param probeOk result of the last request sent through the tunnel (null = not measured yet)
+     */
+    fun health(state: VpnState, probeOk: Boolean?): VpnHealth = when (state) {
+        VpnState.Off -> VpnHealth.Off
+        VpnState.Connecting -> VpnHealth.Connecting
+        VpnState.Error -> VpnHealth.Error
+        VpnState.On -> if (probeOk == false) VpnHealth.NoTraffic else VpnHealth.Working
     }
 
     /** "1:05:09" / "05:09". */

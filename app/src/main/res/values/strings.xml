@@ -15,6 +15,16 @@
     <string name="choose_launcher">Выбор лаунчера</string>
     <string name="launcher_hint">«Штатный лаунчер» сбрасывает наш выбор по умолчанию и открывает родной экран. Если кнопка Home всё равно возвращает сюда — «Выбор лаунчера».</string>
     <string name="choose_launcher_hint">Если после выбора Blue Box кнопка Home открывает страницу Google, а не этот экран — это Google TV: он игнорирует лаунчер по умолчанию. Нужно через adb отключить штатный лаунчер: adb -s АДРЕС:5555 shell pm disable-user --user 0 com.google.android.apps.tv.launcherx (на старых прошивках — com.google.android.tvlauncher). Вернуть назад: adb -s АДРЕС:5555 shell pm enable com.google.android.apps.tv.launcherx</string>
+    <string name="vpn_section">VPN</string>
+    <string name="vpn_app_title">Приложение VPN на карточке</string>
+    <string name="vpn_app_hint">OK на карточке VPN в быстрых настройках включает и выключает выбранное приложение, долгое OK открывает системное окно VPN. Переключать можно только то, что приложение умеет само (Clash, Tailscale, v2rayNG и приложения с кнопкой-переключателем); остальные просто открываются.</string>
+    <string name="vpn_app_none">Не выбрано</string>
+    <string name="vpn_app_switch">переключается</string>
+    <string name="vpn_app_open">только открывается</string>
+    <string name="vpn_app_empty">VPN-приложений не найдено</string>
+    <string name="vpn_switching_on">Включаю VPN…</string>
+    <string name="vpn_switching_off">Выключаю VPN…</string>
+    <string name="vpn_no_traffic">трафик не идёт</string>
     <string name="no_stock_launcher">Штатный лаунчер не найден</string>
     <string name="on">Вкл</string>
     <string name="off">Выкл</string>

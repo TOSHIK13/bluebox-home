@@ -69,6 +69,22 @@ class VpnMonitor(context: Context, private val onState: (VpnState) -> Unit) {
         return VpnInfo(now - since, iface?.let { counter(it, "rx_bytes") }, iface?.let { counter(it, "tx_bytes") })
     }
 
+    /** The current VPN network (main thread only), to hand to [probe]. */
+    fun tunnel(): Network? = caps.keys.firstOrNull()
+
+    /**
+     * One real request through the tunnel (HTTP 204 check, no body): round trip in ms, or null when it failed or timed out.
+     * "VPN is up" and "traffic passes" are different things; this tells them apart. Blocking: not for the main thread.
+     */
+    fun probe(net: Network): Long? = runCatching {
+        val t0 = SystemClock.elapsedRealtime()
+        val c = net.openConnection(java.net.URL(PROBE_URL)) as java.net.HttpURLConnection
+        try {
+            c.connectTimeout = 3000; c.readTimeout = 3000; c.instanceFollowRedirects = false; c.useCaches = false
+            if (c.responseCode == 204) SystemClock.elapsedRealtime() - t0 else null
+        } finally { c.disconnect() }
+    }.getOrNull()
+
     /** sysfs first; TrafficStats as the fallback where sysfs is hidden (the TV box). */
     private fun counter(iface: String, name: String): Long? =
         runCatching { File("/sys/class/net/$iface/statistics/$name").readText().trim().toLong() }.getOrNull()
@@ -88,6 +104,8 @@ class VpnMonitor(context: Context, private val onState: (VpnState) -> Unit) {
     }
 
     private companion object {
+        const val PROBE_URL = "http://connectivitycheck.gstatic.com/generate_204"
+
         /** Process-wide, so the panel opened later still knows when Home first saw the tunnel. */
         val firstSeen = HashMap<Long, Long>()
     }

@@ -61,6 +61,13 @@ object Prefs {
         c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().remove("hidden_notices").apply()
     }
 
+    /** Package of the VPN app the VPN card switches; null = none chosen (the card opens the system VPN dialog). */
+    fun vpnApp(c: Context): String? = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString("vpn_app", null)
+
+    fun setVpnApp(c: Context, pkg: String?) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().apply { if (pkg == null) remove("vpn_app") else putString("vpn_app", pkg) }.apply()
+    }
+
     /** Channel rows: owner's order and switched-off channels, by [app.bluebox.home.logic.ChannelRules.key]. */
     fun channelOrder(c: Context): List<String> =
         c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString("channel_order", null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()

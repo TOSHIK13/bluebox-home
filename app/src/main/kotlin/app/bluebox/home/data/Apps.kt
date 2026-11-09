@@ -9,6 +9,9 @@ import android.widget.Toast
 import app.bluebox.home.Prefs
 import app.bluebox.home.R
 import app.bluebox.home.logic.AppEntry
+import app.bluebox.home.logic.CommandKind
+import app.bluebox.home.logic.VpnControl
+import app.bluebox.home.logic.VpnControls
 
 /** Installed-app queries and the few system intents the home screen launches. */
 class Apps(private val context: Context) {
@@ -25,6 +28,35 @@ class Apps(private val context: Context) {
             }
         }
         return seen.values.toList()
+    }
+
+    /** A VPN app found on the box: its package, name and what Home can do with it. */
+    data class VpnApp(val pkg: String, val label: String, val control: VpnControl)
+
+    /** Installed apps that declare a VPN service (BIND_VPN_SERVICE), with the control Home found for each. */
+    @Suppress("DEPRECATION")
+    fun vpnApps(): List<VpnApp> = runCatching {
+        pm.getInstalledPackages(PackageManager.GET_SERVICES or PackageManager.GET_ACTIVITIES)
+            .filter { p -> p.services.orEmpty().any { it.permission == VpnControls.BIND_VPN } }
+            .map { p ->
+                val exported = p.activities.orEmpty().filter { it.exported }.map { it.name }
+                VpnApp(p.packageName, p.applicationInfo?.let { pm.getApplicationLabel(it).toString() } ?: p.packageName, VpnControls.controlFor(p.packageName, exported))
+            }
+            .sortedBy { it.label.lowercase() }
+    }.getOrDefault(emptyList())
+
+    /**
+     * Switches the chosen VPN app: its own on/off (or toggle) request when it has one, otherwise just opens the app.
+     * [vpnUp] says which way. Returns true when a request was sent.
+     */
+    fun switchVpn(pkg: String, vpnUp: Boolean): Boolean {
+        val app = vpnApps().firstOrNull { it.pkg == pkg } ?: return fail(pkg)
+        val cmd = app.control.command(vpnUp) ?: return launch(pkg)
+        val i = Intent().setClassName(pkg, cmd.cls).apply { cmd.action?.let { action = it } }
+        return runCatching {
+            if (cmd.kind == CommandKind.Broadcast) context.sendBroadcast(i) else context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        }.getOrElse { launch(pkg) }
     }
 
     fun icon(pkg: String): Drawable? = runCatching {
