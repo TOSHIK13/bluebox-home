@@ -1,4 +1,4 @@
-# Cuts a release: checks the tree, runs the gate, tags vX.Y.Z and (only with -Push) pushes the tag; CI builds and publishes.
+﻿# Cuts a release: checks the tree, runs the gate, tags vX.Y.Z and (only with -Push) pushes the tag; CI builds and publishes.
 #   powershell -File scripts/release.ps1 -Bump patch            # dry run: prints the next tag, changes nothing
 #   powershell -File scripts/release.ps1 -Bump minor -Tag       # verify + create the local tag
 #   powershell -File scripts/release.ps1 -Version 0.3.0-beta.1 -Tag -Push
