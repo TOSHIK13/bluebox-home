@@ -231,7 +231,7 @@ class HomeActivity : Activity() {
         topSpacer = View(this)
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(topSpacer, lp(-1, 0)); addView(main.root); addView(extra); addView(View(context), lp(-1, dp(38)))
+            addView(topSpacer, lp(-1, 0)); addView(main.root); addView(extra); addView(View(context), lp(-1, dp(SHELF_BOTTOM)))
         }
         rowsScroll = object : ScrollView(this) {
             // the shelves are placed by scrollToBlock; the default "scroll the focused card just into view" would undo it
@@ -239,7 +239,7 @@ class HomeActivity : Activity() {
         }.apply { isVerticalScrollBarEnabled = false; addView(body) }
         content = rowsScroll
         rowsScroll.addOnLayoutChangeListener { _, _, t, _, b, _, ot, _, ob -> if (b - t != ob - ot && blocks.isNotEmpty()) rowsScroll.post { fitSpacer() } }
-        root.addView(rowsScroll, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { leftMargin = dp(72); bottomMargin = dp(38) })
+        root.addView(rowsScroll, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { leftMargin = dp(72) })
 
         // clock top-right
         val time = TextClock(this).apply {
@@ -396,7 +396,7 @@ class HomeActivity : Activity() {
 
     /** The first shelf sits on the bottom line when not scrolled; shorter than the window by the spacer on top. */
     private fun fitSpacer() {
-        val h = maxOf(0, windowH() - dp(38) - blocks[0].root.measuredHeight)
+        val h = maxOf(0, windowH() - dp(SHELF_BOTTOM) - blocks[0].root.measuredHeight)
         if (topSpacer.layoutParams.height != h) topSpacer.layoutParams = topSpacer.layoutParams.apply { height = h }
     }
     private fun bodyBottom(b: Block) = if (b === blocks[0]) b.root.bottom else extra.top + b.root.bottom
@@ -408,7 +408,7 @@ class HomeActivity : Activity() {
     private fun scrollToBlock(b: Block, animate: Boolean = true) {
         val i = blocks.indexOf(b)
         val k = lastFocused
-        val target = maxOf(0, bodyBottom(b) - (windowH() - dp(38)))
+        val target = maxOf(0, bodyBottom(b) - (windowH() - dp(SHELF_BOTTOM)))
         val shift = (target - lastTarget).toFloat() // where a shelf was before the jump, relative to where it is now
         if (animate && i == k && target == lastTarget) return
         lastFocused = i; lastTarget = target
@@ -840,6 +840,11 @@ class HomeActivity : Activity() {
 
     private companion object {
         const val PICK = 1
+        /**
+         * Gap under the shelf strip, dp. The pictures' bottom edge lines up with the bottom dock icon (settings):
+         * icon bottom = 20 dp padding + 6 dp row margin + 2 dp centring = 28 dp; a card sits 11 dp above its strip's bottom.
+         */
+        const val SHELF_BOTTOM = 17
         val BLUEBOX_PACKAGE_FALLBACKS = DockRules.DEFAULT_PINNED.take(3)
     }
 }
