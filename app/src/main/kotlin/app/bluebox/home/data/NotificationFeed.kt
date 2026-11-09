@@ -11,7 +11,7 @@ import android.service.notification.StatusBarNotification
 /** One notification as the quick-settings panel shows it. [clearable] is false for ongoing ones (VPN, downloads). */
 data class NoticeItem(
     val key: String, val title: String, val text: String, val pkg: String, val open: PendingIntent?,
-    val clearable: Boolean = true, val tag: String? = null,
+    val clearable: Boolean = true, val tag: String? = null, val postTime: Long = 0L,
 )
 
 /**
@@ -37,7 +37,7 @@ class NotificationFeed : NotificationListenerService() {
         val text = (n.extras.getCharSequence(Notification.EXTRA_TEXT) ?: n.extras.getCharSequence(Notification.EXTRA_SUB_TEXT))?.toString().orEmpty()
         if (title.isEmpty() && text.isEmpty()) return null
         val ongoing = n.flags and (Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR or Notification.FLAG_FOREGROUND_SERVICE) != 0
-        return NoticeItem(sbn.key, title, text, sbn.packageName, n.contentIntent, !ongoing, sbn.tag)
+        return NoticeItem(sbn.key, title, text, sbn.packageName, n.contentIntent, !ongoing, sbn.tag, sbn.postTime)
     }
 
     companion object {

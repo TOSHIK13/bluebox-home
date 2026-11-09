@@ -57,11 +57,16 @@ class VpnMonitor(context: Context, private val onState: (VpnState) -> Unit) {
      * Uptime and tunnel traffic of the current VPN, or null without one. Uptime counts from the moment this process first
      * saw the tunnel (Android does not expose the real start); counters come from the tunnel interface, so they are per tunnel.
      */
-    fun info(): VpnInfo? {
+    fun info(notifiedAtWall: Long = 0L): VpnInfo? {
         val net = caps.keys.firstOrNull() ?: return null
-        val since = firstSeen[net.networkHandle] ?: return null
+        val seen = firstSeen[net.networkHandle] ?: return null
+        // the system "VPN is active" notification is posted when the tunnel comes up, so it is usually earlier than our first look
+        // (Home may have been restarted since); the earlier of the two is closer to the start the system dialog shows
+        val now = SystemClock.elapsedRealtime()
+        val fromNotice = if (notifiedAtWall > 0L) now - (System.currentTimeMillis() - notifiedAtWall).coerceAtLeast(0L) else seen
+        val since = minOf(seen, fromNotice)
         val iface = runCatching { cm.getLinkProperties(net)?.interfaceName }.getOrNull()
-        return VpnInfo(SystemClock.elapsedRealtime() - since, iface?.let { counter(it, "rx_bytes") }, iface?.let { counter(it, "tx_bytes") })
+        return VpnInfo(now - since, iface?.let { counter(it, "rx_bytes") }, iface?.let { counter(it, "tx_bytes") })
     }
 
     /** sysfs first; TrafficStats as the fallback where sysfs is hidden (the TV box). */

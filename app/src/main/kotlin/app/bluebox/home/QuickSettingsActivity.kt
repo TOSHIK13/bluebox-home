@@ -148,16 +148,35 @@ class QuickSettingsActivity : Activity() {
         return card
     }
 
+    /** What the list looked like when it was last built; an identical list is not rebuilt (a rebuild drops focus to the top). */
+    private var noticesKey: Any? = null
+
     private fun renderNotices() {
+        val access = NotificationFeed.hasAccess(this)
+        val hideAll = Prefs.hideOngoing(this)
+        val hidden = Prefs.hiddenNotices(this)
+        val shown = if (!access) emptyList() else NotificationFeed.items
+            .filter { it.tag != "VpnStatusObserver" }
+            .filter { it.clearable || !(hideAll || it.key in hidden) }
+            .take(5)
+        val key = listOf(access, shown.map { listOf(it.key, it.title, it.text, it.clearable) })
+        if (key == noticesKey) return
+        noticesKey = key
+        // a rebuild removes the focused row and the system moves focus to the top of the panel: put it back on the same row
+        val keep = notices.focusedChild?.contentDescription?.toString()
+        val keepIndex = notices.focusedChild?.let { notices.indexOfChild(it) } ?: -1
         notices.removeAllViews()
-        if (NotificationFeed.hasAccess(this)) {
+        try { buildNotices(access, shown) } finally {
+            if (keepIndex >= 0 && notices.childCount > 0) {
+                val rows = (0 until notices.childCount).map { notices.getChildAt(it) }.filter { it.isFocusable }
+                (rows.firstOrNull { it.contentDescription?.toString() == keep } ?: rows.getOrNull(keepIndex.coerceAtMost(rows.size - 1)))?.requestFocus()
+            }
+        }
+    }
+
+    private fun buildNotices(access: Boolean, shown: List<app.bluebox.home.data.NoticeItem>) {
+        if (access) {
             devText = null
-            val hideAll = Prefs.hideOngoing(this)
-            val hidden = Prefs.hiddenNotices(this)
-            val shown = NotificationFeed.items
-                .filter { it.tag != "VpnStatusObserver" }
-                .filter { it.clearable || !(hideAll || it.key in hidden) }
-                .take(5)
             shown.forEach { n ->
                 val sub = if (n.text.isNotEmpty() && n.title.isNotEmpty()) label(n.text, 12, Tok.text72).apply { maxLines = 2 } else null
                 // OK opens the notification and marks it read; long OK marks it read without opening
@@ -196,7 +215,7 @@ class QuickSettingsActivity : Activity() {
         vpnTitleDot.background = rounded(color, dp(5).toFloat())
         val vpnApp = if (s == VpnState.On) NotificationFeed.vpnApp() else null
         vpnState.text = getString(textRes) + (vpnApp?.let { " · $it" } ?: "")
-        val info = if (s == VpnState.On) vpn.info() else null
+        val info = if (s == VpnState.On) vpn.info(NotificationFeed.vpn()?.postTime ?: 0L) else null
         vpnStats.visibility = if (info != null) View.VISIBLE else View.GONE
         if (info != null) {
             vpnTime.text = VpnRules.duration(info.upMs)
