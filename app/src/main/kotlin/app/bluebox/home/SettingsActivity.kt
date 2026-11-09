@@ -92,7 +92,8 @@ class SettingsActivity : Activity() {
 
         section(getString(R.string.stock_launcher))
         row(getString(R.string.stock_launcher), getString(R.string.launcher_hint), null) { apps.restoreStockHome() }
-        row(getString(R.string.choose_launcher), null, null) { apps.homeSettings() }
+        row(getString(R.string.choose_launcher), null, null,
+            sub = label(getString(R.string.choose_launcher_hint), 12, Tok.text56).apply { maxLines = 10 }) { apps.homeSettings() }
 
         list.addView(space(0, 24))
         val target = list.getChildAt(keep.coerceIn(0, list.childCount - 1))
