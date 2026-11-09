@@ -104,6 +104,8 @@ class HomeActivity : Activity() {
         super.onResume()
         askPermissions()
         vpn.start()
+        NotificationFeed.badge = { runOnUiThread { if (!isDestroyed) updateBadge() } }
+        updateBadge()
         Thread { runCatching { app.bluebox.home.data.UpdateCheck.maybe(applicationContext) } }.start() // not on io: a slow network must not delay the cards
         // coming back from an app usually changes nothing: read the provider again only when it said so (or once a minute, as a net)
         val stale = android.os.SystemClock.elapsedRealtime() - loadedAt > 60_000L
@@ -157,7 +159,7 @@ class HomeActivity : Activity() {
 
     private fun dockViews(): List<View> = (0 until dock.childCount).map { dock.getChildAt(it) } + (0 until dockBottom.childCount).map { dockBottom.getChildAt(it) }
 
-    override fun onPause() { vpn.stop(); super.onPause() }
+    override fun onPause() { vpn.stop(); NotificationFeed.badge = null; super.onPause() }
 
     override fun onDestroy() {
         runCatching { contentResolver.unregisterContentObserver(observer) }
@@ -341,6 +343,12 @@ class HomeActivity : Activity() {
     }
 
     private lateinit var posterSide: FrameLayout
+
+    private var gearBadge: View? = null
+
+    private fun updateBadge() {
+        gearBadge?.visibility = if (NotificationFeed.hasUnread()) View.VISIBLE else View.GONE
+    }
 
     private fun showVpn(s: VpnState) {
         val (color, textRes) = when (s) {
@@ -783,7 +791,13 @@ class HomeActivity : Activity() {
         dockItem(getString(R.string.all_apps), null, R.drawable.ic_all_apps, -1, into = dockBottom) { startActivity(android.content.Intent(this, AllAppsActivity::class.java)) }
         val v = dockItem(getString(R.string.vpn), null, R.drawable.ic_vpn, -1, dot = true, into = dockBottom) { apps.vpnSettings() }
         vpnButton = v; vpnDot = v.findViewWithTag("dot")
-        dockItem(getString(R.string.settings), null, R.drawable.ic_settings, -1, into = dockBottom) { startActivity(android.content.Intent(this, QuickSettingsActivity::class.java)) }
+        val gear = dockItem(getString(R.string.settings), null, R.drawable.ic_settings, -1, into = dockBottom) { startActivity(android.content.Intent(this, QuickSettingsActivity::class.java)) }
+        // red dot on the gear while there is an unread (dismissable) notification; ongoing ones never light it
+        val unreadDot = View(this).apply { background = rounded(Tok.error, dp(5).toFloat()); visibility = View.GONE }
+        ((gear as LinearLayout).getChildAt(0) as FrameLayout).addView(unreadDot,
+            FrameLayout.LayoutParams(dp(10), dp(10), Gravity.TOP or Gravity.END).apply { topMargin = dp(3); rightMargin = dp(3) })
+        gearBadge = unreadDot
+        updateBadge()
         showVpn(VpnState.Off)
         dockLabels.forEach { it.visibility = if (dockExpanded) View.VISIBLE else View.GONE }
         rebuilding = false

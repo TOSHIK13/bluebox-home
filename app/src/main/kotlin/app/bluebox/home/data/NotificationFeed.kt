@@ -21,13 +21,14 @@ data class NoticeItem(
  */
 class NotificationFeed : NotificationListenerService() {
     override fun onListenerConnected() { service = this; refresh() }
-    override fun onListenerDisconnected() { service = null; items = emptyList(); changed?.invoke() }
+    override fun onListenerDisconnected() { service = null; items = emptyList(); changed?.invoke(); badge?.invoke() }
     override fun onNotificationPosted(sbn: StatusBarNotification) { refresh() }
     override fun onNotificationRemoved(sbn: StatusBarNotification) { refresh() }
 
     private fun refresh() {
         items = runCatching { activeNotifications.orEmpty().mapNotNull(::toItem) }.getOrDefault(emptyList())
         changed?.invoke()
+        badge?.invoke()
     }
 
     private fun toItem(sbn: StatusBarNotification): NoticeItem? {
@@ -45,7 +46,12 @@ class NotificationFeed : NotificationListenerService() {
             private set
         /** Called on the thread that posted the change; the panel hops to the main thread. */
         @Volatile var changed: (() -> Unit)? = null
+        /** Second listener for Home's settings icon; separate so the panel's own callback cannot clear it. */
+        @Volatile var badge: (() -> Unit)? = null
         @Volatile private var service: NotificationFeed? = null
+
+        /** True when there is something to read: any notification that can be dismissed (ongoing ones do not count). */
+        fun hasUnread(): Boolean = items.any { it.clearable }
 
         /** The system "VPN is active" notification: its text names the app, its intent opens the system dialog with time/traffic. */
         fun vpn(): NoticeItem? = items.firstOrNull { it.tag == "VpnStatusObserver" }
