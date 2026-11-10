@@ -10,6 +10,7 @@ import app.bluebox.home.Prefs
 import app.bluebox.home.R
 import app.bluebox.home.logic.AppEntry
 import app.bluebox.home.logic.CommandKind
+import app.bluebox.home.logic.VpnCommand
 import app.bluebox.home.logic.VpnControl
 import app.bluebox.home.logic.VpnControls
 
@@ -51,13 +52,59 @@ class Apps(private val context: Context) {
      */
     fun switchVpn(pkg: String, vpnUp: Boolean): Boolean {
         val app = vpnApps().firstOrNull { it.pkg == pkg } ?: return fail(pkg)
-        val cmd = app.control.command(vpnUp) ?: return launch(pkg)
+        val cmd = effectiveControl(pkg, app.control).command(vpnUp) ?: return launch(pkg)
         val i = Intent().setClassName(pkg, cmd.cls).apply { cmd.action?.let { action = it } }
         return runCatching {
             if (cmd.kind == CommandKind.Broadcast) context.sendBroadcast(i) else context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             true
         }.getOrElse { launch(pkg) }
     }
+
+    /** The app's own control with the owner's picks from Settings laid over it. */
+    fun effectiveControl(pkg: String, base: VpnControl): VpnControl = VpnControls.withOverrides(
+        base, Prefs.vpnCmd(context, pkg, "on"), Prefs.vpnCmd(context, pkg, "off"), Prefs.vpnCmd(context, pkg, "toggle"))
+
+    /**
+     * Every entry point [pkg] exposes to other apps: exported activities, receivers and services of its manifest that
+     * name an intent action (the action is what a launcher shortcut or automation app would call). Android has no API
+     * for intent filters of other apps, so the app's AndroidManifest.xml is read directly. Blocking: not for the main thread.
+     */
+    fun exportedCommands(pkg: String): List<VpnCommand> = runCatching {
+        val ns = "http://schemas.android.com/apk/res/android"
+        val out = LinkedHashSet<VpnCommand>()
+        val x = pm.getResourcesForApplication(pkg).assets.openXmlResourceParser("AndroidManifest.xml")
+        try {
+            var kind: CommandKind? = null; var cls = ""; var exported: Boolean? = null
+            var actions = ArrayList<String>(); var hasFilter = false
+            fun flush() {
+                val k = kind ?: return
+                if (exported ?: hasFilter) {
+                    val full = if (cls.startsWith(".")) pkg + cls else if ('.' !in cls) "$pkg.$cls" else cls
+                    val acts = actions.filter { it != Intent.ACTION_MAIN }
+                    if (acts.isEmpty()) { if (k == CommandKind.Activity) out += VpnCommand(k, full) } else acts.forEach { out += VpnCommand(k, full, it) }
+                }
+                kind = null
+            }
+            var ev = x.eventType
+            while (ev != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) when (x.name) {
+                    "activity", "activity-alias", "receiver" -> {
+                        flush()
+                        kind = if (x.name == "receiver") CommandKind.Broadcast else CommandKind.Activity
+                        cls = x.getAttributeValue(ns, "name").orEmpty()
+                        exported = x.getAttributeValue(ns, "exported")?.let { it == "true" }
+                        actions = ArrayList(); hasFilter = false
+                    }
+                    "service", "provider" -> flush()
+                    "intent-filter" -> hasFilter = true
+                    "action" -> if (kind != null) x.getAttributeValue(ns, "name")?.let { actions += it }
+                }
+                ev = x.next()
+            }
+            flush()
+        } finally { x.close() }
+        out.toList()
+    }.getOrDefault(emptyList())
 
     fun icon(pkg: String): Drawable? = runCatching {
         pm.getLeanbackLaunchIntentForPackage(pkg)?.component?.let { pm.getActivityIcon(it) } ?: pm.getApplicationIcon(pkg)

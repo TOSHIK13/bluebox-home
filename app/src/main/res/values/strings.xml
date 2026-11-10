@@ -17,8 +17,14 @@
     <string name="choose_launcher_hint">Если после выбора Blue Box кнопка Home открывает страницу Google, а не этот экран — это Google TV: он игнорирует лаунчер по умолчанию. Нужно через adb отключить штатный лаунчер: adb -s АДРЕС:5555 shell pm disable-user --user 0 com.google.android.apps.tv.launcherx (на старых прошивках — com.google.android.tvlauncher). Вернуть назад: adb -s АДРЕС:5555 shell pm enable com.google.android.apps.tv.launcherx</string>
     <string name="vpn_section">VPN</string>
     <string name="vpn_app_title">Приложение VPN на карточке</string>
-    <string name="vpn_app_hint">OK на карточке VPN в быстрых настройках включает и выключает выбранное приложение, долгое OK открывает системное окно VPN. Переключать можно только то, что приложение умеет само (Clash, Tailscale, v2rayNG и приложения с кнопкой-переключателем); остальные просто открываются.</string>
+    <string name="vpn_app_hint">Кнопка VPN в меню включает и выключает выбранное приложение, карточка VPN в уведомлениях открывает системное окно. Команды ниже — это входы, которые приложение открывает другим (Clash, Tailscale, v2rayNG известны заранее; у остальных можно выбрать вход из списка). Без команд приложение просто открывается.</string>
     <string name="vpn_app_none">Не выбрано</string>
+    <string name="vpn_cmd_on">Команда «Включить»</string>
+    <string name="vpn_cmd_off">Команда «Выключить»</string>
+    <string name="vpn_cmd_toggle">Команда «Переключить»</string>
+    <string name="vpn_cmd_unset">не задана</string>
+    <string name="vpn_cmd_default">Как у приложения (по умолчанию)</string>
+    <string name="vpn_cmd_pick">Что вызвать у приложения</string>
     <string name="vpn_app_switch">переключается</string>
     <string name="vpn_app_open">только открывается</string>
     <string name="vpn_app_empty">VPN-приложений не найдено</string>

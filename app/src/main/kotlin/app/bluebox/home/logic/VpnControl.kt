@@ -6,6 +6,16 @@ enum class CommandKind { Activity, Broadcast }
 /** One request: an exported component of the VPN app, optionally with an action. */
 data class VpnCommand(val kind: CommandKind, val cls: String, val action: String? = null)
 
+/** Stored form "Activity|class|action" (action may be empty). */
+fun VpnCommand.encode(): String = "${kind.name}|$cls|${action.orEmpty()}"
+
+fun decodeVpnCommand(s: String): VpnCommand? {
+    val p = s.split('|')
+    if (p.size != 3 || p[1].isEmpty()) return null
+    val kind = CommandKind.values().firstOrNull { it.name == p[0] } ?: return null
+    return VpnCommand(kind, p[1], p[2].ifEmpty { null })
+}
+
 /**
  * What Home can do with a VPN app. [on]/[off] are separate commands, [toggle] is one that flips the state itself;
  * all null = the only thing possible is opening the app.
@@ -49,6 +59,14 @@ object VpnControls {
         "com.tailscale.ipn" to tailscale,
         "com.v2ray.ang" to v2ray,
     )
+
+    const val NONE = "-"
+
+    /** [base] with the owner's picks laid over it: a stored command replaces the slot, [NONE] empties it, null keeps it. */
+    fun withOverrides(base: VpnControl, on: String?, off: String?, toggle: String?): VpnControl {
+        fun pick(stored: String?, def: VpnCommand?) = when (stored) { null -> def; NONE -> null; else -> decodeVpnCommand(stored) ?: def }
+        return VpnControl(pick(on, base.on), pick(off, base.off), pick(toggle, base.toggle))
+    }
 
     /** Names of exported components that flip a VPN (a launcher-shortcut / quick-tile entry point). */
     private val toggleName = Regex("(?i)(quick)?toggle|scswitch|switchvpn|vpnswitch|quickswitch")

@@ -124,13 +124,6 @@ class QuickSettingsActivity : Activity() {
         if (!sent) apps.vpnSettings()
     }
 
-    private fun switchVpn(pkg: String) {
-        val up = lastVpn == VpnState.On || lastVpn == VpnState.Connecting
-        val sent = apps.switchVpn(pkg, up)
-        if (sent) android.widget.Toast.makeText(this, getString(if (up) R.string.vpn_switching_off else R.string.vpn_switching_on), android.widget.Toast.LENGTH_SHORT).show()
-        probeOk = null; probeMs = null; probedAt = 0L
-    }
-
     // ---- real check through the tunnel (see VpnMonitor.probe), repeated while the panel is open and the VPN is up
     private var probeOk: Boolean? = null
     private var probeMs: Long? = null
@@ -166,12 +159,8 @@ class QuickSettingsActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(12), dp(16), dp(12))
             plate(14); contentDescription = getString(R.string.vpn)
-            // OK switches the VPN app chosen in Settings; without one (or on long OK) the system VPN dialog opens
-            setOnClickListener {
-                val pkg = Prefs.vpnApp(this@QuickSettingsActivity)
-                if (pkg == null) openVpnDialog() else switchVpn(pkg)
-            }
-            setOnLongClickListener { openVpnDialog(); true }
+            // OK opens the system VPN dialog (the main-screen dock button is what switches the VPN)
+            setOnClickListener { openVpnDialog() }
         }
         val img = ImageView(this).apply { setImageResource(R.drawable.ic_vpn); setColorFilter(Tok.text) }
         vpnIcon = img
