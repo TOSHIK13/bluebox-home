@@ -37,7 +37,12 @@ class UpdatesActivity : Activity() {
         root.addView(ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(list) }, lp(0, -1, 1f))
         setContentView(root)
         render()
+        // opened from the "new version" notification: fetch the release now so "Скачать и установить" is already under focus
+        if (Prefs.updateFound(this) != null) { focusInstall = true; check() }
     }
+
+    private var focusInstall = false
+    private var installRow: View? = null
 
     private fun newer(i: UpdateInfo?) = i != null && UpdateRules.isNewer(BuildConfig.BASE_VERSION, i.tag)
 
@@ -80,6 +85,7 @@ class UpdatesActivity : Activity() {
     private fun render() {
         val keep = list.focusedChild?.let { list.indexOfChild(it) }?.takeIf { it >= 0 } ?: focusIndex
         list.removeAllViews()
+        installRow = null
         val i = info
         val found = if (newer(i)) i else null
 
@@ -98,7 +104,7 @@ class UpdatesActivity : Activity() {
             if (found.apk == null || found.sha == null) {
                 row(getString(R.string.updates_install), getString(R.string.updates_no_files), null, enabled = false) {}
             } else {
-                row(getString(R.string.updates_install), found.notes.takeIf { it.isNotBlank() }?.let { UpdateRules.shortNotes(it) }, found.tag) { install() }
+                installRow = row(getString(R.string.updates_install), found.notes.takeIf { it.isNotBlank() }?.let { UpdateRules.shortNotes(it) }, found.tag) { install() }
             }
         }
 
@@ -110,6 +116,7 @@ class UpdatesActivity : Activity() {
             Prefs.setUpdateBeta(this, !Prefs.updateBeta(this)); info = null; status = null; render()
         }
         list.addView(space(0, 24))
+        if (focusInstall && installRow != null) { focusInstall = false; installRow?.requestFocus(); return }
         val target = list.getChildAt(keep.coerceIn(0, list.childCount - 1))
         (if (target?.isFocusable == true) target else (0 until list.childCount).map { list.getChildAt(it) }.firstOrNull { it.isFocusable })?.requestFocus()
     }

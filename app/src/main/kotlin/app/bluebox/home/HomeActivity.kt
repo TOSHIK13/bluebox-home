@@ -81,6 +81,13 @@ class HomeActivity : Activity() {
                 if (runCatching { requestPermissions(arrayOf(perm), 1) }.isSuccess) return
             }
         }
+        val post = "android.permission.POST_NOTIFICATIONS"
+        if (android.os.Build.VERSION.SDK_INT >= 33 && !Prefs.asked(this, "post")) {
+            Prefs.setAsked(this, "post")
+            if (checkSelfPermission(post) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                if (runCatching { requestPermissions(arrayOf(post), 3) }.isSuccess) return
+            }
+        }
         if (!Prefs.asked(this, "usage")) {
             Prefs.setAsked(this, "usage")
             if (!apps.hasUsageAccess()) { apps.usageAccessSettings(); return }
@@ -104,6 +111,8 @@ class HomeActivity : Activity() {
         super.onResume()
         askPermissions()
         vpn.start()
+        NotificationFeed.badge = { runOnUiThread { if (!isDestroyed) updateBadge() } }
+        updateBadge()
         Thread { runCatching { app.bluebox.home.data.UpdateCheck.maybe(applicationContext) } }.start() // not on io: a slow network must not delay the cards
         // coming back from an app usually changes nothing: read the provider again only when it said so (or once a minute, as a net)
         val stale = android.os.SystemClock.elapsedRealtime() - loadedAt > 60_000L
@@ -157,7 +166,7 @@ class HomeActivity : Activity() {
 
     private fun dockViews(): List<View> = (0 until dock.childCount).map { dock.getChildAt(it) } + (0 until dockBottom.childCount).map { dockBottom.getChildAt(it) }
 
-    override fun onPause() { vpn.stop(); super.onPause() }
+    override fun onPause() { vpn.stop(); NotificationFeed.badge = null; super.onPause() }
 
     override fun onDestroy() {
         runCatching { contentResolver.unregisterContentObserver(observer) }
@@ -231,7 +240,7 @@ class HomeActivity : Activity() {
         topSpacer = View(this)
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(topSpacer, lp(-1, 0)); addView(main.root); addView(extra); addView(View(context), lp(-1, dp(38)))
+            addView(topSpacer, lp(-1, 0)); addView(main.root); addView(extra); addView(View(context), lp(-1, dp(SHELF_BOTTOM)))
         }
         rowsScroll = object : ScrollView(this) {
             // the shelves are placed by scrollToBlock; the default "scroll the focused card just into view" would undo it
@@ -239,7 +248,7 @@ class HomeActivity : Activity() {
         }.apply { isVerticalScrollBarEnabled = false; addView(body) }
         content = rowsScroll
         rowsScroll.addOnLayoutChangeListener { _, _, t, _, b, _, ot, _, ob -> if (b - t != ob - ot && blocks.isNotEmpty()) rowsScroll.post { fitSpacer() } }
-        root.addView(rowsScroll, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { leftMargin = dp(72); bottomMargin = dp(38) })
+        root.addView(rowsScroll, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { leftMargin = dp(72) })
 
         // clock top-right
         val time = TextClock(this).apply {
@@ -342,6 +351,12 @@ class HomeActivity : Activity() {
 
     private lateinit var posterSide: FrameLayout
 
+    private var gearBadge: View? = null
+
+    private fun updateBadge() {
+        gearBadge?.visibility = if (NotificationFeed.hasUnread()) View.VISIBLE else View.GONE
+    }
+
     private fun showVpn(s: VpnState) {
         val (color, textRes) = when (s) {
             VpnState.On -> Tok.ok to R.string.vpn_on
@@ -396,7 +411,7 @@ class HomeActivity : Activity() {
 
     /** The first shelf sits on the bottom line when not scrolled; shorter than the window by the spacer on top. */
     private fun fitSpacer() {
-        val h = maxOf(0, windowH() - dp(38) - blocks[0].root.measuredHeight)
+        val h = maxOf(0, windowH() - dp(SHELF_BOTTOM) - blocks[0].root.measuredHeight)
         if (topSpacer.layoutParams.height != h) topSpacer.layoutParams = topSpacer.layoutParams.apply { height = h }
     }
     private fun bodyBottom(b: Block) = if (b === blocks[0]) b.root.bottom else extra.top + b.root.bottom
@@ -408,7 +423,7 @@ class HomeActivity : Activity() {
     private fun scrollToBlock(b: Block, animate: Boolean = true) {
         val i = blocks.indexOf(b)
         val k = lastFocused
-        val target = maxOf(0, bodyBottom(b) - (windowH() - dp(38)))
+        val target = maxOf(0, bodyBottom(b) - (windowH() - dp(SHELF_BOTTOM)))
         val shift = (target - lastTarget).toFloat() // where a shelf was before the jump, relative to where it is now
         if (animate && i == k && target == lastTarget) return
         lastFocused = i; lastTarget = target
@@ -783,7 +798,13 @@ class HomeActivity : Activity() {
         dockItem(getString(R.string.all_apps), null, R.drawable.ic_all_apps, -1, into = dockBottom) { startActivity(android.content.Intent(this, AllAppsActivity::class.java)) }
         val v = dockItem(getString(R.string.vpn), null, R.drawable.ic_vpn, -1, dot = true, into = dockBottom) { apps.vpnSettings() }
         vpnButton = v; vpnDot = v.findViewWithTag("dot")
-        dockItem(getString(R.string.settings), null, R.drawable.ic_settings, -1, into = dockBottom) { startActivity(android.content.Intent(this, QuickSettingsActivity::class.java)) }
+        val gear = dockItem(getString(R.string.settings), null, R.drawable.ic_settings, -1, into = dockBottom) { startActivity(android.content.Intent(this, QuickSettingsActivity::class.java)) }
+        // red dot on the gear while there is an unread (dismissable) notification; ongoing ones never light it
+        val unreadDot = View(this).apply { background = rounded(Tok.error, dp(5).toFloat()); visibility = View.GONE }
+        ((gear as LinearLayout).getChildAt(0) as FrameLayout).addView(unreadDot,
+            FrameLayout.LayoutParams(dp(10), dp(10), Gravity.TOP or Gravity.END).apply { topMargin = dp(3); rightMargin = dp(3) })
+        gearBadge = unreadDot
+        updateBadge()
         showVpn(VpnState.Off)
         dockLabels.forEach { it.visibility = if (dockExpanded) View.VISIBLE else View.GONE }
         rebuilding = false
@@ -840,6 +861,11 @@ class HomeActivity : Activity() {
 
     private companion object {
         const val PICK = 1
+        /**
+         * Gap under the shelf strip, dp. The pictures' bottom edge lines up with the bottom dock icon (settings):
+         * icon bottom = 20 dp padding + 6 dp row margin + 2 dp centring = 28 dp; a card sits 11 dp above its strip's bottom.
+         */
+        const val SHELF_BOTTOM = 17
         val BLUEBOX_PACKAGE_FALLBACKS = DockRules.DEFAULT_PINNED.take(3)
     }
 }

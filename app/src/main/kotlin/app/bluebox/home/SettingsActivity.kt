@@ -77,6 +77,12 @@ class SettingsActivity : Activity() {
             runCatching { requestPermissions(arrayOf(listings), 2) }
         }
 
+        section(getString(R.string.vpn_section))
+        val chosen = Prefs.vpnApp(this)
+        row(getString(R.string.vpn_app_title), null, chosen?.let { runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(it, 0)).toString() }.getOrNull() }
+            ?: getString(R.string.vpn_app_none),
+            sub = label(getString(R.string.vpn_app_hint), 12, Tok.text56).apply { maxLines = 6 }) { chooseVpnApp() }
+
         section(getString(R.string.channels_title))
         row(getString(R.string.channels_title), getString(R.string.channels_hint), null) {
             startActivity(android.content.Intent(this, ChannelsActivity::class.java))
@@ -98,6 +104,26 @@ class SettingsActivity : Activity() {
         list.addView(space(0, 24))
         val target = list.getChildAt(keep.coerceIn(0, list.childCount - 1))
         (if (target?.isFocusable == true) target else list.children().firstOrNull { it.isFocusable })?.requestFocus()
+    }
+
+    /** List of the VPN apps found on the box, each marked "переключается" or "только открывается". */
+    private fun chooseVpnApp() {
+        Thread {
+            val found = apps.vpnApps()
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                if (found.isEmpty()) { android.widget.Toast.makeText(this, R.string.vpn_app_empty, android.widget.Toast.LENGTH_SHORT).show(); return@runOnUiThread }
+                val names = listOf(getString(R.string.vpn_app_none)) + found.map {
+                    it.label + " · " + getString(if (it.control.canSwitch) R.string.vpn_app_switch else R.string.vpn_app_open)
+                }
+                val current = found.indexOfFirst { it.pkg == Prefs.vpnApp(this) } + 1
+                android.app.AlertDialog.Builder(this).setTitle(R.string.vpn_app_title)
+                    .setSingleChoiceItems(names.toTypedArray(), current) { d, which ->
+                        Prefs.setVpnApp(this, if (which == 0) null else found[which - 1].pkg)
+                        d.dismiss(); render()
+                    }.show()
+            }
+        }.start()
     }
 
     /** One row showing what the TV provider hands this app: package → number of rows. OK reads again. */
