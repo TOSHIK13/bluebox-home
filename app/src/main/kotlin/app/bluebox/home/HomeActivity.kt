@@ -81,6 +81,13 @@ class HomeActivity : Activity() {
                 if (runCatching { requestPermissions(arrayOf(perm), 1) }.isSuccess) return
             }
         }
+        val post = "android.permission.POST_NOTIFICATIONS"
+        if (android.os.Build.VERSION.SDK_INT >= 33 && !Prefs.asked(this, "post")) {
+            Prefs.setAsked(this, "post")
+            if (checkSelfPermission(post) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                if (runCatching { requestPermissions(arrayOf(post), 3) }.isSuccess) return
+            }
+        }
         if (!Prefs.asked(this, "usage")) {
             Prefs.setAsked(this, "usage")
             if (!apps.hasUsageAccess()) { apps.usageAccessSettings(); return }

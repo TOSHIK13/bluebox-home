@@ -94,6 +94,7 @@
     <string name="updates_title">Обновления</string>
     <string name="updates_help">Новые версии Home берутся из релизов на GitHub. Перед установкой проверяются контрольная сумма и подпись; подтвердить установку нужно пультом.</string>
     <string name="updates_installed">Установлена</string>
+    <string name="updates_notice_title">Вышла новая версия Blue Box Home</string>
     <string name="updates_latest_title">Последняя версия</string>
     <string name="updates_check">Проверить сейчас</string>
     <string name="updates_checking">Проверяю…</string>
