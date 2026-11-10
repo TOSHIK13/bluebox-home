@@ -64,6 +64,16 @@ object Prefs {
     /** Package of the VPN app the VPN card switches; null = none chosen (the card opens the system VPN dialog). */
     fun vpnApp(c: Context): String? = c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString("vpn_app", null)
 
+    /** Owner's pick for one action of a VPN app ([slot] = on/off/toggle): encoded command, "-" for none, null = app default. */
+    fun vpnCmd(c: Context, pkg: String, slot: String): String? =
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString("vpn_cmd_${pkg}_$slot", null)
+
+    fun setVpnCmd(c: Context, pkg: String, slot: String, value: String?) {
+        c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().apply {
+            if (value == null) remove("vpn_cmd_${pkg}_$slot") else putString("vpn_cmd_${pkg}_$slot", value)
+        }.apply()
+    }
+
     fun setVpnApp(c: Context, pkg: String?) {
         c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().apply { if (pkg == null) remove("vpn_app") else putString("vpn_app", pkg) }.apply()
     }

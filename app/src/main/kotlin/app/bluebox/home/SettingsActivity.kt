@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import app.bluebox.home.data.Apps
+import app.bluebox.home.logic.encode
 import app.bluebox.home.data.NotificationFeed
 import app.bluebox.home.data.WatchNextSource
 
@@ -82,6 +83,16 @@ class SettingsActivity : Activity() {
         row(getString(R.string.vpn_app_title), null, chosen?.let { runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(it, 0)).toString() }.getOrNull() }
             ?: getString(R.string.vpn_app_none),
             sub = label(getString(R.string.vpn_app_hint), 12, Tok.text56).apply { maxLines = 6 }) { chooseVpnApp() }
+        if (chosen != null) {
+            val base = apps.vpnApps().firstOrNull { it.pkg == chosen }?.control ?: app.bluebox.home.logic.VpnControl()
+            val now = apps.effectiveControl(chosen, base)
+            listOf("on" to R.string.vpn_cmd_on, "off" to R.string.vpn_cmd_off, "toggle" to R.string.vpn_cmd_toggle).forEach { (slot, title) ->
+                val cmd = when (slot) { "on" -> now.on; "off" -> now.off; else -> now.toggle }
+                row(getString(title), null, cmd?.let { it.action?.substringAfterLast('.') ?: it.cls.substringAfterLast('.') } ?: getString(R.string.vpn_cmd_unset)) {
+                    chooseVpnCommand(chosen, slot)
+                }
+            }
+        }
 
         section(getString(R.string.channels_title))
         row(getString(R.string.channels_title), getString(R.string.channels_hint), null) {
@@ -120,6 +131,27 @@ class SettingsActivity : Activity() {
                 android.app.AlertDialog.Builder(this).setTitle(R.string.vpn_app_title)
                     .setSingleChoiceItems(names.toTypedArray(), current) { d, which ->
                         Prefs.setVpnApp(this, if (which == 0) null else found[which - 1].pkg)
+                        d.dismiss(); render()
+                    }.show()
+            }
+        }.start()
+    }
+
+    /** Entry points the VPN app exposes (read from its manifest), to assign to one action; plus "app default" and "nothing". */
+    private fun chooseVpnCommand(pkg: String, slot: String) {
+        Thread {
+            val found = apps.exportedCommands(pkg)
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                val names = listOf(getString(R.string.vpn_cmd_default), getString(R.string.vpn_cmd_unset)) + found.map {
+                    (if (it.kind == app.bluebox.home.logic.CommandKind.Broadcast) "⚡ " else "") +
+                        (it.action ?: it.cls.substringAfterLast('.')) + "\n" + it.cls.substringAfterLast('.')
+                }
+                val stored = Prefs.vpnCmd(this, pkg, slot)
+                val current = when (stored) { null -> 0; app.bluebox.home.logic.VpnControls.NONE -> 1; else -> found.indexOfFirst { it.encode() == stored }.let { if (it < 0) 0 else it + 2 } }
+                android.app.AlertDialog.Builder(this).setTitle(R.string.vpn_cmd_pick)
+                    .setSingleChoiceItems(names.toTypedArray(), current) { d, which ->
+                        Prefs.setVpnCmd(this, pkg, slot, when (which) { 0 -> null; 1 -> app.bluebox.home.logic.VpnControls.NONE; else -> found[which - 2].encode() })
                         d.dismiss(); render()
                     }.show()
             }

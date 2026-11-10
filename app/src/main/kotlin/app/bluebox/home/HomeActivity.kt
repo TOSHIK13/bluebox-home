@@ -166,7 +166,7 @@ class HomeActivity : Activity() {
 
     private fun dockViews(): List<View> = (0 until dock.childCount).map { dock.getChildAt(it) } + (0 until dockBottom.childCount).map { dockBottom.getChildAt(it) }
 
-    override fun onPause() { vpn.stop(); NotificationFeed.badge = null; super.onPause() }
+    override fun onPause() { vpn.stop(); vpnButton.removeCallbacks(probeLoop); NotificationFeed.badge = null; super.onPause() }
 
     override fun onDestroy() {
         runCatching { contentResolver.unregisterContentObserver(observer) }
@@ -357,16 +357,51 @@ class HomeActivity : Activity() {
         gearBadge?.visibility = if (NotificationFeed.hasUnread()) View.VISIBLE else View.GONE
     }
 
-    private fun showVpn(s: VpnState) {
-        val (color, textRes) = when (s) {
-            VpnState.On -> Tok.ok to R.string.vpn_on
-            VpnState.Off -> Tok.off to R.string.vpn_off
-            VpnState.Connecting -> Tok.warn to R.string.vpn_connecting
-            VpnState.Error -> Tok.error to R.string.vpn_error
+    private var lastVpn = VpnState.Off
+
+    /** Dock button: switches the VPN app chosen in Settings (its own on/off or toggle); without a choice opens the system VPN settings. */
+    private fun switchVpn() {
+        val pkg = Prefs.vpnApp(this) ?: run { apps.vpnSettings(); return }
+        val up = lastVpn == VpnState.On || lastVpn == VpnState.Connecting
+        if (apps.switchVpn(pkg, up))
+            android.widget.Toast.makeText(this, getString(if (up) R.string.vpn_switching_off else R.string.vpn_switching_on), android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private var probeOk: Boolean? = null
+    private var probing = false
+    private val probeLoop = Runnable { showVpn(lastVpn) }
+    private val probeIo = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    /** While the tunnel is up, one real request through it every 15 s tells "up" from "up and passing traffic". */
+    private fun probeVpn() {
+        if (probing) return
+        val net = vpn.tunnel() ?: return
+        probing = true
+        probeIo.execute {
+            val ok = vpn.probe(net) != null
+            runOnUiThread { probing = false; probeOk = ok; showVpn(lastVpn) }
         }
-        vpnDot.background = rounded(color, dp(4).toFloat())
+    }
+
+    /** Icon by state: outline grey = off, check green = working, "!" orange = up but silent, yellow/red = connecting / no link. */
+    private fun showVpn(s: VpnState) {
+        lastVpn = s
+        vpnButton.removeCallbacks(probeLoop)
+        if (s == VpnState.On) { probeVpn(); vpnButton.postDelayed(probeLoop, 15_000L) } else probeOk = null
+        val health = app.bluebox.home.logic.VpnRules.health(s, probeOk)
+        val (color, res, textRes) = when (health) {
+            app.bluebox.home.logic.VpnHealth.Off -> Triple(Tok.off, R.drawable.ic_vpn_off, R.string.vpn_off)
+            app.bluebox.home.logic.VpnHealth.Working -> Triple(Tok.ok, R.drawable.ic_vpn_ok, R.string.vpn_on)
+            app.bluebox.home.logic.VpnHealth.NoTraffic -> Triple(Color.parseColor("#ff9d4d"), R.drawable.ic_vpn_bad, R.string.vpn_no_traffic)
+            app.bluebox.home.logic.VpnHealth.Connecting -> Triple(Tok.warn, R.drawable.ic_vpn_off, R.string.vpn_connecting)
+            app.bluebox.home.logic.VpnHealth.Error -> Triple(Tok.error, R.drawable.ic_vpn_bad, R.string.vpn_error)
+        }
+        vpnDot.visibility = View.GONE
+        vpnIcon?.let { it.setImageResource(res); it.setColorFilter(color) }
         vpnButton.contentDescription = getString(textRes)
     }
+
+    private var vpnIcon: ImageView? = null
 
     /** One shelf: small header, big title of the focused card, horizontal strip of cards. */
     private class Block(val root: View, val title: TextView, val cards: LinearLayout, val scroll: HorizontalScrollView)
@@ -796,8 +831,9 @@ class HomeActivity : Activity() {
             }.tag = "add"
         }
         dockItem(getString(R.string.all_apps), null, R.drawable.ic_all_apps, -1, into = dockBottom) { startActivity(android.content.Intent(this, AllAppsActivity::class.java)) }
-        val v = dockItem(getString(R.string.vpn), null, R.drawable.ic_vpn, -1, dot = true, into = dockBottom) { apps.vpnSettings() }
+        val v = dockItem(getString(R.string.vpn), null, R.drawable.ic_vpn, -1, dot = true, into = dockBottom) { switchVpn() }
         vpnButton = v; vpnDot = v.findViewWithTag("dot")
+        vpnIcon = ((v as LinearLayout).getChildAt(0) as FrameLayout).getChildAt(0) as ImageView
         val gear = dockItem(getString(R.string.settings), null, R.drawable.ic_settings, -1, into = dockBottom) { startActivity(android.content.Intent(this, QuickSettingsActivity::class.java)) }
         // red dot on the gear while there is an unread (dismissable) notification; ongoing ones never light it
         val unreadDot = View(this).apply { background = rounded(Tok.error, dp(5).toFloat()); visibility = View.GONE }
